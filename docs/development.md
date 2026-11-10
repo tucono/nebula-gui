@@ -58,14 +58,13 @@ Rules:
 - **`internal/gui` never imports `internal/service`.** The GUI and service communicate only through `internal/api`.
 - Platform-specific code uses `_linux.go`, `_darwin.go`, and `_windows.go` filename suffixes rather than runtime checks.
 
-## Bootstrapping the module (first time)
+## Dependencies
+
+The module is `github.com/tucono/nebula-gui`. Fyne and go-winio were added in M0. Nebula (M1) and pro-bing (M3) are added when the code that uses them lands:
 
 ```sh
-go mod init github.com/<you>/nebula-gui
-go get fyne.io/fyne/v2@latest
-go get github.com/slackhq/nebula@latest
+go get github.com/slackhq/nebula@v1.12.0
 go get github.com/prometheus-community/pro-bing@latest
-go get github.com/Microsoft/go-winio@latest   # Windows named pipes
 ```
 
 Pin the Nebula version on purpose and update it on purpose. Read Nebula's CHANGELOG before each bump.
@@ -77,27 +76,25 @@ Run the service and the GUI in separate terminals. Use a socket in your home dir
 ### Linux
 Instead of running the service as root, give the built binary `CAP_NET_ADMIN`:
 ```sh
-go build -o bin/nebula-guid ./cmd/nebula-guid
-sudo setcap cap_net_admin,cap_net_raw+ep bin/nebula-guid
-./bin/nebula-guid --listen "$XDG_RUNTIME_DIR/nebula-guid.sock" --state-dir ./.dev-state --dev
+make dev-service   # build with -tags dev, setcap, run with --dev on $XDG_RUNTIME_DIR/nebula-guid.sock
 
 # other terminal
-NEBULA_GUI_SOCKET="$XDG_RUNTIME_DIR/nebula-guid.sock" go run ./cmd/nebula-gui
+make gui
 ```
-`setcap` has to be run again after every rebuild. A `make dev-service` target should do both steps.
+`setcap` has to be run again after every rebuild, so `make dev-service` does it each time (it asks for your sudo password).
 
 ### macOS
 ```sh
-go build -o bin/nebula-guid ./cmd/nebula-guid
-sudo ./bin/nebula-guid --listen /tmp/nebula-guid.sock --socket-owner "$USER" --state-dir ./.dev-state --dev
+go build -tags dev -o bin/nebula-guid-dev ./cmd/nebula-guid
+sudo ./bin/nebula-guid-dev --listen /tmp/nebula-guid.sock --dev
 NEBULA_GUI_SOCKET=/tmp/nebula-guid.sock go run ./cmd/nebula-gui
 ```
 
 ### Windows (Administrator PowerShell for the service)
 ```powershell
-go build -o bin\nebula-guid.exe .\cmd\nebula-guid
+go build -tags dev -o bin\nebula-guid-dev.exe .\cmd\nebula-guid
 copy path\to\wintun.dll bin\
-.\bin\nebula-guid.exe --listen \\.\pipe\nebula-guid-dev --dev
+.\bin\nebula-guid-dev.exe --listen \\.\pipe\nebula-guid-dev --dev
 # normal PowerShell
 $env:NEBULA_GUI_SOCKET="\\.\pipe\nebula-guid-dev"; go run .\cmd\nebula-gui
 ```
@@ -105,11 +102,11 @@ $env:NEBULA_GUI_SOCKET="\\.\pipe\nebula-guid-dev"; go run .\cmd\nebula-gui
 `--dev` makes the service:
 - log at debug level to stderr;
 - run in the foreground instead of as a system service;
-- loosen socket ownership to the user who launched it.
+- give the user who launched it access to the socket or pipe (`$SUDO_USER` on Linux and macOS, the current user on Windows). `--socket-owner` overrides this.
 
-**Release builds must not accept `--dev`.** Enforce this with a build tag.
+**Release builds don't accept `--dev`.** The flag exists only in binaries built with `-tags dev` (`cmd/nebula-guid/dev_on.go`). The dev binary is named `nebula-guid-dev` so it can't be mistaken for a release build.
 
-## Common tasks (planned Makefile targets)
+## Common tasks (Makefile targets)
 
 | Target | Does |
 |---|---|
@@ -118,8 +115,9 @@ $env:NEBULA_GUI_SOCKET="\\.\pipe\nebula-guid-dev"; go run .\cmd\nebula-gui
 | `make gui` | `go run ./cmd/nebula-gui` with the dev socket |
 | `make test` | `go test ./...` |
 | `make lint` | `golangci-lint run` |
-| `make lab-up` / `make lab-down` | Start or stop the local Nebula test lab ([testing.md](testing.md)) |
-| `make package-{linux,macos,windows}` | Build platform packages |
+| `make fmt` | `golangci-lint fmt` (gofmt + goimports) |
+| `make lab-up` / `make lab-down` | Start or stop the local Nebula test lab ([testing.md](testing.md)). *Planned (M1).* |
+| `make package-{linux,macos,windows}` | Build platform packages. *Planned (M4).* |
 
 ## Cross-compiling
 

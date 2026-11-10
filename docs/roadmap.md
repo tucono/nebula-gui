@@ -4,10 +4,10 @@
 # Roadmap
 
 ## M0: Skeleton
-- [ ] `go mod init`, Makefile, golangci-lint config, CI running vet, lint, and tests on all three OSes
-- [ ] `internal/api` types for `version` and `status`
-- [ ] `internal/ipc` listener and dialer (Unix socket plus Windows named pipe)
-- [ ] Service answers `GET /v1/version`. The GUI shows it in a window.
+- [x] `go mod init`, Makefile, golangci-lint config, CI running vet, lint, and tests on all three OSes
+- [x] `internal/api` types for `version` and `status`
+- [x] `internal/ipc` listener and dialer (Unix socket plus Windows named pipe)
+- [x] Service answers `GET /v1/version`. The GUI shows it in a window.
 
 ## M1: Service runs Nebula
 - [ ] `internal/nebulactl` wrapping `nebula.Main` and `Control`
