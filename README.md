@@ -4,6 +4,8 @@ A cross-platform desktop app for managing [Nebula](https://github.com/slackhq/ne
 
 A user loads a Nebula config. The app starts and stops the tunnel, shows which peers are connected, and can ping a peer to open a tunnel to it.
 
+> **Personal project.** Built for a private Nebula network shared with friends and family. The repo is public so they can download releases and updates. You're welcome to use it, but there's no support, and issues or pull requests may go unanswered.
+
 > **Status:** pre-alpha, design phase. No code yet. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Goals
