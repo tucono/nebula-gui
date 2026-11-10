@@ -1,0 +1,15 @@
+# build output
+/bin/
+/dist/
+
+# local dev state
+/.dev-state/
+
+# test lab secrets — never commit
+/testlab/pki/
+*.key
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store
