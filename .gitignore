@@ -9,6 +9,16 @@
 /testlab/pki/
 *.key
 
+# Nebula certs, keys and real configs — never commit
+# (example configs must be named *.example.yml)
+*.crt
+*.pem
+*.p12
+config*.yml
+config*.yaml
+!*.example.yml
+!*.example.yaml
+
 # editors / OS
 .idea/
 .vscode/
