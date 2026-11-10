@@ -22,14 +22,26 @@ Error codes: `bad_request`, `invalid_config`, `not_configured`, `already_running
 
 ### `GET /v1/version`
 ```json
-{ "service_version": "0.1.0", "nebula_version": "1.9.x", "api_version": 1 }
+{
+  "service_version": "0.1.0",
+  "api_version": 1,
+  "nebula": {
+    "version": "1.10.0",
+    "source": "managed",              // bundled | managed | custom
+    "path": "/var/lib/nebula-gui/nebula/1.10.0/nebula",
+    "supported_range": ">=1.8.0 <1.11.0",
+    "in_supported_range": true
+  }
+}
 ```
 The GUI calls this first. If `api_version` doesn't match, it shows an "update required" message.
 
 ### `GET /v1/status`
 ```json
 {
-  "state": "running",             // stopped | starting | running | stopping | error
+  "state": "running",             // stopped | spawning | running | stopping | crashed | error
+  "restarts_last_hour": 0,
+  "pid": 12345,
   "error": "",                    // last error when state == "error"
   "overlay_ips": ["192.168.100.3/24"],
   "cert": { "name": "laptop", "groups": ["users"], "not_after": "2027-01-01T00:00:00Z", "fingerprint": "…" },
@@ -45,9 +57,11 @@ Body: `{ "yaml": "<full nebula config with inline PEM>" }`
 The service rejects the config with `invalid_config` if:
 - it doesn't parse;
 - any `pki.*` value is a file path instead of inline PEM;
-- `nebula.Main` fails the dry run (`configTest=true`).
+- `nebula -test -config <generated file>` fails, run with the active binary.
 
-If Nebula is running, the response includes `"restart_required": true`. The service does **not** restart on its own.
+Any `sshd` and `logging.format` settings in the uploaded config are **overridden** by the service (see [architecture.md](architecture.md#config-store)). The response lists the overridden keys in `"overridden_keys"`.
+
+If Nebula is running, the service tries a live `reload`. The response includes `"applied": "reloaded"`, or `"restart_required"` if the changed keys can't be reloaded. The service does **not** restart on its own.
 
 ### `GET /v1/config`
 Returns the stored YAML with `pki.key` **redacted**.
@@ -76,10 +90,13 @@ No body. Returns the new `status`. Connecting while already connected returns `a
   ]
 }
 ```
-The data comes from `Control.ListHostmapHosts`. Nebula has no per-peer byte or latency counters, so `last_ping_rtt_ms` is the only latency figure.
+The data comes from the SSH console (`list-hostmap -json` and `list-pending-hostmap -json`), parsed with the parser for the running Nebula version and cached for 1 s. Nebula has no per-peer byte or latency counters, so `last_ping_rtt_ms` is the only latency figure.
+
+### `POST /v1/peers/{vpn_ip}/tunnel`
+Asks Nebula to open a tunnel to that peer without sending traffic (console `create-tunnel`). Returns `202`. The peer appears as `pending` and then `established`.
 
 ### `POST /v1/peers/{vpn_ip}/close`
-Closes the tunnel to that peer (`Control.CloseTunnel`).
+Closes the tunnel to that peer (console `close-tunnel`).
 
 ### `POST /v1/ping`
 Request: `{ "vpn_ip": "192.168.100.5", "count": 3, "timeout_ms": 5000 }`
@@ -101,34 +118,56 @@ Ring buffer of the last ~2000 entries.
 
 See [updates.md](updates.md) for how update checks and installs work.
 
+There are two components: `nebula` (the binary) and `app` (GUI + service).
+
 ### `GET /v1/update`
 ```json
 {
-  "current":   { "version": "0.3.0", "nebula_version": "1.9.3" },
-  "available": { "version": "0.4.0", "nebula_version": "1.10.0", "security": false,
-                 "notes_url": "…", "released_at": "…" },          // null if up to date
-  "upstream_nebula": { "version": "1.10.1", "url": "…" },          // null if we embed the latest
-  "state": "idle",            // idle | checking | downloading | verifying | ready | installing | error
-  "progress": 0.0,            // 0–1 while downloading
+  "nebula": {
+    "current":   { "version": "1.9.3", "source": "managed" },
+    "previous":  "1.9.2",                                    // rollback target, or null
+    "available": { "version": "1.10.0", "security": false, "notes_url": "…",
+                   "tested": true },                         // tested=false only on the upstream channel
+    "installed_versions": ["1.9.2", "1.9.3", "1.8.4 (bundled)"],
+    "bad_versions": [],
+    "channel": "curated",                                    // curated | upstream | pinned
+    "updates_supported": true,                               // false when source == custom
+    "state": "idle", "progress": 0.0, "error": ""
+  },
+  "app": {
+    "current":   { "version": "0.3.0" },
+    "available": null,
+    "self_update_supported": true,
+    "state": "idle", "progress": 0.0, "error": ""
+  },
   "last_checked": "2026-11-10T13:00:00Z",
-  "error": "",
-  "self_update_supported": true,   // false for package-manager installs on Linux
-  "settings": { "auto_check": true, "install_when_disconnected": false, "skipped_version": "" }
+  "settings": {
+    "auto_check": true,
+    "nebula_auto_install": "security-only",   // off | security-only | all
+    "install_when_disconnected": false,
+    "skipped": { "nebula": "", "app": "" }
+  }
 }
 ```
+The `state` values are `idle`, `checking`, `downloading`, `verifying`, `ready`, `installing`, `health_check`, `rolled_back`, and `error`.
 
 ### `POST /v1/update/check`
 Runs a check now and returns the result as `GET /v1/update` does. Rate-limited to one check per 60 s.
 
 ### `POST /v1/update/install`
-Request: `{ "version": "0.4.0", "when": "now" }`. `when` is `now` or `disconnected`.
+Request: `{ "component": "nebula", "version": "1.10.0", "when": "now" }`. `component` is `nebula` or `app`. `when` is `now` or `disconnected`.
 
-The `version` must match the update the service already found and verified. **Clients can't provide URLs, file paths, or hashes.** The response is `202 Accepted`. The GUI then polls `GET /v1/update`, and during the install the service restarts.
+The `version` must be one the service already found and verified. **Clients can't provide URLs, file paths, or hashes.** The response is `202 Accepted`. The GUI polls `GET /v1/update`. A Nebula install ends in `idle`, with the new version as `current`, or in `rolled_back`.
+
+### `POST /v1/nebula/rollback`
+Switches to the `previous` version, or to the given `{ "version": "…" }` if it is already installed and not marked bad. It restarts Nebula if connected.
 
 ### `PUT /v1/update/settings`
-Request: `{ "auto_check": true, "install_when_disconnected": false, "skipped_version": "0.4.0" }`
+Request: the `settings` object above plus `"channel"`. Changing `channel` to `upstream` requires `"acknowledge_untested": true`.
 
-Error codes for these endpoints: `update_unavailable`, `update_not_supported`, `update_verification_failed`, `update_in_progress`.
+**There is deliberately no endpoint to set a custom Nebula binary path.** It can only be set in the service's config file, which needs admin rights to edit.
+
+Error codes for these endpoints: `update_unavailable`, `update_not_supported`, `update_verification_failed`, `update_in_progress`, `version_out_of_range`, `rollback_unavailable`.
 
 ## Versioning
 - Breaking changes increase the path prefix (`/v2`) and `api_version`.

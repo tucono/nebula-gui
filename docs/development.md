@@ -7,7 +7,7 @@
 | Go | the version in `go.mod` (latest stable) | https://go.dev/dl |
 | C compiler | — | Fyne uses CGO for OpenGL |
 | `fyne` CLI | latest | `go install fyne.io/tools/cmd/fyne@latest`, used for packaging and icons |
-| `nebula-cert` | match the embedded Nebula version | For the test lab. Distro packages are often old (for example 1.6.x). Prefer the GitHub release binary. |
+| `nebula` + `nebula-cert` | a version inside the supported range | For the test lab. Distro packages are often old (for example 1.6.x). Prefer the GitHub release binary. |
 | `golangci-lint` | latest | Linting |
 
 ### Per-OS packages
@@ -36,7 +36,9 @@ internal/
     ipc_unix.go
     ipc_windows.go
   service/           # API handlers, state machine, config store, pinger, log buffer
-  nebulactl/         # thin wrapper over nebula.Main / *nebula.Control (only package importing nebula)
+  nebulaproc/        # spawn/stop/supervise the nebula child process (per-OS signal + job/pdeathsig code)
+  nebulactl/         # SSH console client + per-version output parsers (testdata/<version>/ golden files)
+  binstore/          # versioned nebula binary store, active.json, hash re-verification
   updater/           # manifest fetch + minisign verify, download, per-OS installer launch
   gui/               # Fyne windows, widgets, tray, poller
   pki/               # inline-PEM helpers, cert parsing for display
@@ -50,7 +52,7 @@ Makefile
 ```
 
 Rules:
-- **Only `internal/nebulactl` imports `github.com/slackhq/nebula`.** This keeps Nebula API changes, which do happen between minor versions, in one place.
+- **The project does not import `github.com/slackhq/nebula` at all.** All Nebula knowledge lives in `internal/nebulactl` (console commands and parsers) and `internal/config` (the generated runtime config).
 - **`internal/gui` never imports `internal/service`.** The GUI and service communicate only through `internal/api`.
 - Platform-specific code uses `_linux.go`, `_darwin.go`, and `_windows.go` filename suffixes rather than runtime checks.
 
@@ -59,12 +61,14 @@ Rules:
 ```sh
 go mod init github.com/<you>/nebula-gui
 go get fyne.io/fyne/v2@latest
-go get github.com/slackhq/nebula@latest
+go get golang.org/x/crypto/ssh@latest              # SSH console client
+go get github.com/jedisct1/go-minisign@latest     # manifest signatures
+go get github.com/Masterminds/semver/v3@latest    # supported-range checks
 go get github.com/prometheus-community/pro-bing@latest
 go get github.com/Microsoft/go-winio@latest   # Windows named pipes
 ```
 
-Pin the Nebula version on purpose and update it on purpose. Read Nebula's CHANGELOG before each bump.
+There is no Nebula Go dependency to pin. Instead, the **supported Nebula range** is a constant in `internal/nebulactl` (`SupportedRange = ">=1.8.0 <1.11.0"`). Raise it only after the version matrix passes ([testing.md](testing.md#nebula-version-matrix)).
 
 ## Running in development
 
@@ -74,26 +78,29 @@ Run the service and the GUI in separate terminals. Use a socket in your home dir
 Instead of running the service as root, give the built binary `CAP_NET_ADMIN`:
 ```sh
 go build -o bin/nebula-guid ./cmd/nebula-guid
-sudo setcap cap_net_admin,cap_net_raw+ep bin/nebula-guid
-./bin/nebula-guid --listen "$XDG_RUNTIME_DIR/nebula-guid.sock" --state-dir ./.dev-state --dev
+sudo setcap cap_net_raw+ep bin/nebula-guid                    # for ICMP ping
+mkdir -p .dev-nebula && cp "$(command -v nebula)" .dev-nebula/  # or extract an upstream release here
+sudo setcap cap_net_admin+ep .dev-nebula/nebula               # file caps don't pass to children; give them to nebula itself
+./bin/nebula-guid --listen "$XDG_RUNTIME_DIR/nebula-guid.sock" --state-dir ./.dev-state \
+    --nebula-binary ./.dev-nebula/nebula --dev
 
 # other terminal
 NEBULA_GUI_SOCKET="$XDG_RUNTIME_DIR/nebula-guid.sock" go run ./cmd/nebula-gui
 ```
-`setcap` has to be run again after every rebuild. A `make dev-service` target should do both steps.
+`setcap` has to be run again after every rebuild. `--nebula-binary` is **dev-only**. In release builds the binary comes from the binary store or the admin config file. A `make dev-service` target should do both steps.
 
 ### macOS
 ```sh
 go build -o bin/nebula-guid ./cmd/nebula-guid
-sudo ./bin/nebula-guid --listen /tmp/nebula-guid.sock --socket-owner "$USER" --state-dir ./.dev-state --dev
+sudo ./bin/nebula-guid --listen /tmp/nebula-guid.sock --socket-owner "$USER" --state-dir ./.dev-state \
+    --nebula-binary ./.dev-nebula/nebula --dev   # unzip nebula-darwin.zip into .dev-nebula/
 NEBULA_GUI_SOCKET=/tmp/nebula-guid.sock go run ./cmd/nebula-gui
 ```
 
 ### Windows (Administrator PowerShell for the service)
 ```powershell
 go build -o bin\nebula-guid.exe .\cmd\nebula-guid
-copy path\to\wintun.dll bin\
-.\bin\nebula-guid.exe --listen \\.\pipe\nebula-guid-dev --dev
+.\bin\nebula-guid.exe --listen \\.\pipe\nebula-guid-dev --nebula-binary .\.dev-nebula\nebula.exe --dev  # unzip nebula-windows-amd64.zip (incl. wintun.dll) into .dev-nebula\
 # normal PowerShell
 $env:NEBULA_GUI_SOCKET="\\.\pipe\nebula-guid-dev"; go run .\cmd\nebula-gui
 ```

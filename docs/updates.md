@@ -1,86 +1,84 @@
-# Updates
+# Updates (service branch)
 
-The app can check for updates and install them. Nebula is **built into** `nebula-guid` (ADR-002), so a "Nebula update" means a new nebula-gui release with a newer `github.com/slackhq/nebula` pinned. There is no separate Nebula binary to replace. See ADR-006 in [decisions.md](decisions.md).
+On this branch there are **two independent update streams**:
 
-## What the user sees
+| Stream | What changes | How often | How it's installed | Tunnel downtime |
+|---|---|---|---|---|
+| **Nebula binary** | `<state>/nebula/<ver>/nebula` | Each upstream Nebula release | Download, verify, switch, health check, automatic rollback | About 1–3 s (process restart) |
+| **App** | `nebula-gui` + `nebula-guid` | Our releases | Platform installer (MSI, pkg, deb/rpm), as on the `monolithic` branch | A few seconds (service restart) |
 
-- **Settings → Updates:**
-  - "Check for updates automatically" (on by default) and a "Check now" button
-  - Current versions: app, embedded Nebula, service API
-- **When an update is available:** a banner and tray notification such as *"nebula-gui 0.4.0 is available (Nebula 1.9.3 → 1.10.0)"*, with release notes and buttons for **Install now**, **Install when disconnected**, and **Skip this version**.
-- **Upstream notice (informational only):** if slackhq/nebula has a newer release than the one we embed, and no nebula-gui release includes it yet, show *"Nebula 1.10.1 was released upstream; waiting for a nebula-gui update."* If the upstream release is marked as a security fix, highlight the notice.
+## Nebula binary updates
 
-## Who does what
+### Channels
+The user picks one in Settings → Updates. **`curated` is the default.**
 
-| Step | Process | Why |
-|---|---|---|
-| Scheduled check (startup + every 24 h ± jitter) | Service | Works when the GUI is closed. One check per machine, not one per user. |
-| Download + verification | Service | Writes to its own `0700` state directory, so other users can't swap the file. |
-| Install | Service | Needs privileges to replace system binaries and restart itself. |
-| Prompt, release notes, consent | GUI | The service never installs without a GUI request, except with the optional "auto-install" setting (M5+). |
+| Channel | Source of truth | Trust anchor | Reaches users |
+|---|---|---|---|
+| `curated` | **Our signed channel manifest**, which lists upstream Nebula versions we've tested, their download URLs and SHA-256s | Our minisign key, built into the service | After we've tested and approved the version. Updating the manifest doesn't need an app release. |
+| `upstream` | The latest release on `api.github.com/repos/slackhq/nebula/releases` | HTTPS to GitHub + upstream's `SHASUM256.txt` (not separately signed) | As soon as upstream publishes |
+| `pinned` | The user stays on one version | — | Never; it only shows a notice |
+| *(custom binary)* | Admin-set path | The admin | Updates are turned off |
 
-## Update feed
+`upstream` is an **advanced** option. It only allows versions inside the service's supported range, and warns before installing a version newer than the newest one we've tested.
 
-The service reads a JSON **manifest** that is attached to each GitHub release of nebula-gui:
-
-```
-https://github.com/<owner>/nebula-gui/releases/latest/download/manifest.json
-https://github.com/<owner>/nebula-gui/releases/latest/download/manifest.json.minisig
-```
+### Curated channel manifest
+It's hosted as a file that can be updated, separately from app releases, for example as an asset on a fixed `nebula-channel` GitHub release, or on GitHub Pages:
 
 ```json
 {
-  "version": "0.4.0",
-  "nebula_version": "1.10.0",
-  "api_version": 1,
-  "released_at": "2026-12-01T00:00:00Z",
-  "security": false,
-  "notes_url": "https://github.com/<owner>/nebula-gui/releases/tag/v0.4.0",
-  "min_upgrade_from": "0.1.0",
-  "artifacts": {
-    "windows-amd64": { "url": "…/nebula-gui-0.4.0-windows-amd64.msi", "sha256": "…", "size": 12345678 },
-    "windows-arm64": { "url": "…", "sha256": "…", "size": 0 },
-    "darwin-universal": { "url": "…/nebula-gui-0.4.0.pkg", "sha256": "…", "size": 0 },
-    "linux-amd64-deb": { "url": "…", "sha256": "…", "size": 0 },
-    "linux-amd64-rpm": { "url": "…", "sha256": "…", "size": 0 }
-  }
+  "schema": 1,
+  "generated_at": "2026-12-02T00:00:00Z",
+  "sequence": 42,                       // increases with every update; older ones are rejected (replay protection)
+  "versions": [
+    {
+      "version": "1.10.0",
+      "security": false,
+      "notes_url": "https://github.com/slackhq/nebula/releases/tag/v1.10.0",
+      "min_service_version": "0.3.0",   // older services must update the app first
+      "artifacts": {
+        "linux-amd64":   { "url": "https://github.com/slackhq/nebula/releases/download/v1.10.0/nebula-linux-amd64.tar.gz", "sha256": "…", "binary_sha256": "…" },
+        "linux-arm64":   { "url": "…", "sha256": "…", "binary_sha256": "…" },
+        "darwin":        { "url": "…/nebula-darwin.zip", "sha256": "…", "binary_sha256": "…" },
+        "windows-amd64": { "url": "…/nebula-windows-amd64.zip", "sha256": "…", "binary_sha256": "…", "wintun_sha256": "…" }
+      }
+    }
+  ],
+  "revoked": ["1.9.1"]                  // versions that are known bad; switched away from on the next check
 }
 ```
 
-- The feed URL is a build-time constant. Packagers and forks can override it with a service config setting. It can **never** be set through the IPC API.
-- The upstream notice reads `https://api.github.com/repos/slackhq/nebula/releases/latest`, without authentication. Unauthenticated requests are limited to 60/hour per IP, which is far more than one call per day needs. Cache the response with its ETag.
+The downloads **come straight from upstream GitHub releases**. We don't host Nebula binaries. Our signature confirms which upstream files we've tested. Signature file: `nebula-channel.json.minisig`.
 
-## Verification (all must pass before installing)
+Release process for us: a CI job watches upstream releases, runs the version matrix tests ([testing.md](testing.md)), and on success opens a PR that adds the version to the manifest. A maintainer reviews, merges, and signs the manifest.
 
-1. **Manifest signature:** `manifest.json.minisig` is checked against the **ed25519 public key built into the binary** (minisign format, e.g. `github.com/jedisct1/go-minisign`). HTTPS alone isn't enough, because it doesn't protect against a compromised GitHub account or release.
-2. **No downgrades:** `manifest.version` must be newer than the running version (semver). A replayed old manifest is ignored.
-3. **Artifact hash:** the SHA-256 of the downloaded file matches the signed manifest. The size is checked before downloading the whole file.
-4. **Platform signature (defense in depth):**
-   - Windows: the MSI's Authenticode signature is valid and from our certificate.
-   - macOS: `pkgutil --check-signature` shows our Developer ID and the package is notarized.
-   - Linux: covered by step 3. Packages can additionally be GPG-signed.
+### Verification
+1. **Curated:** the manifest's minisign signature is valid and `sequence` is newer than the last one seen.
+   **Upstream:** the release is fetched over HTTPS and `SHASUM256.txt` is downloaded from the same release.
+2. The archive's SHA-256 matches. After extracting, the binary's SHA-256 also matches (curated only).
+3. **Platform signature, where upstream provides one.** For example, on macOS run `codesign --verify --strict` and check the Team ID. Record whether a signature was present. A signature that was present before and is missing now is a hard failure.
+4. Run `<new>/nebula -version` and check that its output matches the expected version.
+5. Run `<new>/nebula -test -config run/config.yml`. Nebula's own config test must pass with the user's current config.
 
-The minisign private key is kept offline or in CI secrets, separate from GitHub write access. Rotating the key needs a release signed with the old key that ships the new public key.
+Archives are extracted with path-traversal protection. Only the expected file names are extracted: `nebula`, `nebula.exe`, and `wintun.dll` for the right architecture.
 
-## Install mechanics per platform
+### Switch, health check, rollback
+1. Install into `nebula/<new>/` with restricted permissions (see [security.md](security.md)).
+2. If connected: stop the old process, write `active.json` (`version=new`, `previous=old`) atomically, and spawn the new one. If disconnected: just update `active.json`.
+3. **Health check** within 30 s: the process is still running, the SSH console answers `version` with the new version, and `print-cert` succeeds. If the lighthouse was reachable before the update, it must be reachable again within 60 s. **That last check only produces a warning**, because network problems shouldn't trigger a rollback.
+4. If the health check fails, **roll back automatically**: switch to `previous`, mark the new version `bad` (it won't be offered again unless the user asks), and tell the GUI.
+5. Keep the active and previous versions plus the bundled one. Delete older ones.
 
-The service starts the platform installer. The installer replaces **both** binaries (GUI + service) and restarts the service.
+Users can also roll back manually from the GUI (`POST /v1/nebula/rollback`).
 
-| Platform | Install command | Notes |
-|---|---|---|
-| Windows | `msiexec /i <file> /qn /norestart` started as a detached process | The MSI stops the service, replaces the files using Restart Manager for the running GUI, and starts the service again. |
-| macOS | `installer -pkg <file> -target /` started detached | The package's postinstall step reloads the launchd daemon (`launchctl bootout` / `bootstrap`). |
-| Linux, `.deb`/`.rpm` from **our download** | `apt-get install -y ./file.deb` / `dnf install -y ./file.rpm` | Supported. |
-| Linux, from a **distro or third-party repo** | — | **Don't self-update.** Only show "Update available. Update through your package manager." The service detects this by checking whether its package came from our repo. |
+### Scheduling
+- Check at startup and every 24 h ± 2 h.
+- Auto-install settings: `off`, `security-only` (the default), or `all`. "Install when disconnected" works the same as on the monolithic branch.
 
-Because the installer restarts the service, **the tunnel goes down for a few seconds**. With "Install when disconnected", the update waits until the user disconnects or the machine is idle. After restarting, the service reconnects if it was connected before the update. It writes a `resume-after-update` marker before running the installer.
+## App updates
+Same as the `monolithic` branch: a signed `manifest.json` attached to each nebula-gui release, the platform installer, and the same verification rules. The one difference: **the installer doesn't replace managed Nebula binaries**. It only updates the `bundled` fallback copy. After an app update, the service checks that the active Nebula version is still inside its supported range. If not, it switches to the newest supported installed version and tells the user.
 
-## Failure handling
-
-- Download and verification errors are shown in the GUI and logged. Nothing is installed. Partial files are deleted.
-- **After an install, the new service reports its version.** If the GUI can't reach a service with the expected version within 60 s, it shows "Update may have failed. See logs" and the path to the installer log. MSI and pkg roll back on their own if the installer itself fails.
-- The **GUI** sees a new `api_version` and asks the user to restart the GUI. On Windows and macOS the installer usually relaunches it.
+## Linux package-manager installs
+If the app itself was installed from a distro repo, app updates only notify, as before. **Managed Nebula binary updates still work**, because they live in the service's own state directory and not in package-manager paths. If the admin set a custom binary like `/usr/bin/nebula`, Nebula updates are left to the package manager.
 
 ## IPC endpoints
-
 See [ipc-api.md](ipc-api.md#updates).
