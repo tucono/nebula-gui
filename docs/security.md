@@ -1,3 +1,6 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+
 # Security (service branch)
 
 The service runs with high privileges and accepts requests from local processes. It also **runs downloaded executables** and **talks to Nebula over a localhost SSH listener**. Treat the IPC API, the binary store, and the SSH console as privilege boundaries.

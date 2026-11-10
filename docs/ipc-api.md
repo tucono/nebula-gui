@@ -1,3 +1,6 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+
 # GUI ↔ Service API (v1)
 
 HTTP/1.1 with JSON bodies, over a local-only transport. No TCP listener, ever.
