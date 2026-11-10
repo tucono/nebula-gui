@@ -23,3 +23,6 @@ config*.yaml
 .idea/
 .vscode/
 .DS_Store
+
+# local Claude Code instructions (not published)
+/CLAUDE.md
