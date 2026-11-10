@@ -1,3 +1,6 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+
 # Testing
 
 ## Unit tests (`go test ./...`)

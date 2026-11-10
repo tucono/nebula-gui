@@ -1,3 +1,6 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+
 # Architecture Decision Records
 
 Short records of significant decisions. Add new ones at the bottom. Don't edit accepted ones. Replace them with a new ADR instead.

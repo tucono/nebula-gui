@@ -1,3 +1,6 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+
 # nebula-gui
 
 A cross-platform desktop app for managing [Nebula](https://github.com/slackhq/nebula) overlay-network connections.
@@ -47,3 +50,16 @@ The reasons for each choice are in [docs/decisions.md](docs/decisions.md).
 | [docs/security.md](docs/security.md) | Threat model and service hardening rules |
 | [docs/decisions.md](docs/decisions.md) | Architecture decision records |
 | [docs/roadmap.md](docs/roadmap.md) | Milestones |
+
+## Authorship
+
+Each file starts with two tags recording how it was made:
+
+- `@authorship`: who wrote it.
+  - `Human-Primary`: written by the maintainer, with at most minor AI help.
+  - `AI-Assisted`: an AI assistant wrote a substantial part of it.
+- `@architect`: who designed it.
+  - `Philip Thomas`: the maintainer designed its structure, and reviewed and refined any AI-written parts.
+  - `AI (<model>)`: an AI assistant proposed the design as well as writing it; the maintainer requested, reviewed and integrated it.
+
+Generated files, files that can't hold comments, and repo configuration files (such as `.gitignore`) aren't tagged.

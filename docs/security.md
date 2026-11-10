@@ -1,3 +1,6 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+
 # Security
 
 The service runs with high privileges and accepts requests from local processes. **Anyone who can talk to the service can change this machine's networking.** Treat the IPC API as a privilege boundary.

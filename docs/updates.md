@@ -1,3 +1,6 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+
 # Updates
 
 The app can check for updates and install them. Nebula is **built into** `nebula-guid` (ADR-002), so a "Nebula update" means a new nebula-gui release with a newer `github.com/slackhq/nebula` pinned. There is no separate Nebula binary to replace. See ADR-006 in [decisions.md](decisions.md).
