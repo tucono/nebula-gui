@@ -17,12 +17,12 @@
 
 **Linux (Debian/Ubuntu/Pop!_OS)**
 ```sh
-sudo apt install gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev
+sudo apt install gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
 ```
 Install Go from the official tarball at https://go.dev/dl, not from apt. The apt `golang` package is usually too old (Ubuntu 24.04 ships Go 1.22). Once any Go 1.21+ is installed, the `toolchain` line in `go.mod` makes `go` download the exact version the project uses.
 **Fedora**
 ```sh
-sudo dnf install golang gcc libXcursor-devel libXrandr-devel mesa-libGL-devel libXi-devel libXinerama-devel libXxf86vm-devel libxkbcommon-devel
+sudo dnf install golang gcc libXcursor-devel libXrandr-devel mesa-libGL-devel libXi-devel libXinerama-devel libXxf86vm-devel libxkbcommon-devel wayland-devel
 ```
 **macOS:** `xcode-select --install`, then `brew install go`.
 
