@@ -19,13 +19,21 @@ All types live in `internal/api`. Errors use this shape:
 { "error": { "code": "not_configured", "message": "no config has been imported" } }
 ```
 
-Error codes: `bad_request`, `invalid_config`, `not_configured`, `already_running`, `not_running`, `ping_failed`, `internal`.
+| Code | HTTP status | Meaning |
+|---|---|---|
+| `bad_request` | 400 | Malformed request: bad JSON, a body over 1 MiB, a missing field, a bad query parameter |
+| `invalid_config` | 422 | The config failed validation or Nebula's dry run |
+| `not_configured` | 409 | No config has been imported |
+| `already_running` | 409 | Connect while Nebula is running |
+| `not_running` | 409 | Disconnect while Nebula is stopped |
+| `ping_failed` | 500 | The ping could not be sent |
+| `internal` | 500 | Anything else, including Nebula failing to start |
 
 ## Endpoints
 
 ### `GET /v1/version`
 ```json
-{ "service_version": "0.1.0", "nebula_version": "1.9.x", "api_version": 1 }
+{ "service_version": "0.1.0", "nebula_version": "1.12.0", "api_version": 1 }
 ```
 The GUI calls this first. If `api_version` doesn't match, it shows an "update required" message.
 
@@ -45,21 +53,29 @@ The GUI calls this first. If `api_version` doesn't match, it shows an "update re
 ### `PUT /v1/config`
 Body: `{ "yaml": "<full nebula config with inline PEM>" }`
 
+Response: `{ "restart_required": false }`
+
 The service rejects the config with `invalid_config` if:
 - it doesn't parse;
-- any `pki.*` value is a file path instead of inline PEM;
+- `pki.ca`, `pki.cert` or `pki.key` is missing, or is a file path instead of inline PEM;
+- `sshd.enabled` is anything other than `false`;
 - `nebula.Main` fails the dry run (`configTest=true`).
 
-If Nebula is running, the response includes `"restart_required": true`. The service does **not** restart on its own.
+A rejected config is not stored. If Nebula is running, `restart_required` is `true`: the new config is stored, but the service does **not** restart on its own. Until the next connect, `/v1/status` keeps describing the running config.
 
 ### `GET /v1/config`
-Returns the stored YAML with `pki.key` **redacted**.
+Response: `{ "yaml": "…" }`, the stored YAML with `pki.key`, and any other value containing a private key, replaced by `<redacted>`. Returns `not_configured` if there is none.
 
 ### `DELETE /v1/config`
-Stops Nebula if it is running, then deletes the stored config.
+Stops Nebula if it is running, then deletes the stored config. Returns the new `status`.
 
 ### `POST /v1/connect` / `POST /v1/disconnect`
-No body. Returns the new `status`. Connecting while already connected returns `already_running`.
+No body. Returns the new `status`.
+
+- Connect: `not_configured` without a config, `already_running` if running. If Nebula fails to start (for example, no permission to create the tun device), the response is `internal` with Nebula's error, and the state becomes `error`.
+- Disconnect: `not_running` if stopped. From `error`, disconnect clears the error and returns to `stopped`.
+- If Nebula stops on its own, the state becomes `error` with the reason in `error`. Connect starts it again.
+- Requests that change state are serialized. A connect sent while another is starting waits for it, then returns `already_running`.
 
 ### `GET /v1/peers`
 ```json
@@ -98,7 +114,7 @@ The first ping often times out while the handshake runs, so the GUI should prese
 ```json
 { "next": 1042, "lines": [ { "seq": 1041, "time": "…", "level": "info", "msg": "Handshake message sent", "fields": { … } } ] }
 ```
-Ring buffer of the last ~2000 entries.
+Ring buffer of the last 2000 entries at info level and above, from the service and from Nebula (Nebula's lines have `"component": "nebula"` in `fields`). Returns lines with `seq >= since`, oldest first. Pass `next` as `since` on the next call to get only new lines. If `since` is older than the buffer, the response starts at the oldest line kept.
 
 ## Updates
 

@@ -8,50 +8,71 @@
 | Package | What to test |
 |---|---|
 | `internal/api` | JSON round-tripping and backward compatibility (decoding with unknown fields) |
-| `internal/service` | The state machine, using a **fake `nebulactl`** interface so no tun device or root is needed. Config validation, including rejecting path-based `pki.*` values. Ping input validation. |
+| `internal/service` | The state machine, using a **fake engine** so no tun device or root is needed. Config validation, including rejecting path-based `pki.*` values. Config store, redaction, log buffer. Ping input validation (M3). |
 | `internal/pki` | Inlining PEM from relative paths, and extracting cert fields |
 | `internal/gui` | Logic only (formatters, view-models). Fyne has `fyne.io/fyne/v2/test` for headless widget tests. |
 
-`internal/service` should depend on an interface, not on Nebula directly:
+`internal/service` depends on an interface, not on Nebula directly (`internal/service/engine.go`):
 
 ```go
 type Engine interface {
-    Start(yaml string) error
-    Stop() error
-    Hosts(pending bool) []HostInfo
-    CloseTunnel(vpnIP netip.Addr) bool
+    Version() string
+    Check(yaml string) (*ConfigInfo, error) // dry run + cert details
+    Start(yaml string) (Instance, error)
+}
+
+type Instance interface {
+    Stop()
+    Done() <-chan struct{}
+    Err() error
 }
 ```
 
-The real implementation is in `internal/nebulactl`. Tests use a fake.
+`NebulaEngine` adapts `internal/nebulactl` to it. Unit tests use a fake (`internal/service/fake_test.go`). M3 adds `Hosts` and `CloseTunnel` to `Instance`.
+
+### Tests with a real Nebula
+
+`internal/nebulactl/nebulatest` generates a throwaway CA, host cert and config in memory, so no key material is ever committed. Its config sets `tun.disabled: true`, so Nebula runs without privileges. `nebulactl.TestStartStop` and `service.TestRealNebulaOverSocket` use it to check the full import, connect and disconnect path in plain `go test`.
+
+These tests skip under `-race`. Nebula 1.12.0's disabled tun device has a data race on close, which the detector reports. Real tun devices don't use that code.
 
 ## Local test lab (integration)
 
-To check real tunnels, you need a lighthouse and at least two hosts. On Linux the cheapest way is **network namespaces** or **Docker**. Nothing is exposed outside the machine.
+`testlab/lab.sh` runs a lighthouse and two hosts as plain `nebula` processes on 127.0.0.1, with the tun device disabled. That needs no root, Docker or network namespaces, and nothing is exposed outside the machine. A disabled tun device still answers ICMP echo, so the dev service can ping alice and bob over the overlay.
 
-### 1. Generate a test PKI
-```sh
-mkdir -p testlab/pki && cd testlab/pki
-nebula-cert ca   -name "nebula-gui test CA"
-nebula-cert sign -name lighthouse -ip 192.168.100.1/24
-nebula-cert sign -name alice      -ip 192.168.100.10/24 -groups users
-nebula-cert sign -name bob        -ip 192.168.100.11/24 -groups users
 ```
-Never commit `testlab/pki/` (add it to `.gitignore`).
-
-### 2. Topology (docker compose)
-```
-          docker bridge 172.30.0.0/24
+            127.0.0.1 (underlay)
    ┌──────────────┬──────────────┬──────────────┐
- lighthouse      alice          bob          (host: nebula-gui dev)
- 172.30.0.2      172.30.0.10    172.30.0.11
- 192.168.100.1   192.168.100.10 192.168.100.11
+ lighthouse      alice          bob          dev (nebula-guid under test)
+ :4301           :4302          :4303        random port, real tun
+ 192.168.100.1   192.168.100.10 192.168.100.11 192.168.100.20
 ```
-Each container runs the stock `nebula` binary with `cap_add: [NET_ADMIN]` and `devices: [/dev/net/tun]`. The lighthouse's `static_host_map` uses the bridge IP. Your local dev service uses another cert, for example `-name dev -ip 192.168.100.20/24`, and points at the lighthouse's bridge IP.
 
-`make lab-up` and `make lab-down` wrap `docker compose -f testlab/compose.yml up -d / down`.
+```sh
+make lab-up        # build nebula + nebula-cert at the pinned version, create the PKI, start the nodes
+make dev-service   # other terminal: the service under test (needs CAP_NET_ADMIN)
+make lab-import    # PUT testlab/dev/config.yml (inline PKI) to the dev service
+make lab-down
+testlab/lab.sh clean   # also deletes the generated PKI
+```
 
-### 3. Manual smoke test
+`lab.sh up` writes the PKI to `testlab/pki/`, node configs and logs to `testlab/run/`, and the dev config to `testlab/dev/config.yml`. All three are gitignored. Never commit them.
+
+### Smoke test with curl (M1)
+```sh
+S=$XDG_RUNTIME_DIR/nebula-guid.sock
+make lab-import
+curl -s --unix-socket $S http://x/v1/status          # configured, cert "dev", stopped
+curl -s --unix-socket $S -X POST http://x/v1/connect  # state "running"
+curl -s --unix-socket $S "http://x/v1/logs?since=0"  # "Handshake message received" from lighthouse
+curl -s --unix-socket $S http://x/v1/config          # pki.key is <redacted>
+ping -c 3 192.168.100.10                              # alice answers over the overlay
+curl -s --unix-socket $S -X POST http://x/v1/disconnect
+```
+
+Without `CAP_NET_ADMIN`, connect fails with `internal` ("Failed to get a tun/tap device"), and `/v1/status` shows state `error`.
+
+### GUI smoke test (M2/M3)
 1. Import `testlab/dev/config.yml` in the GUI and connect.
 2. The status shows `running` and overlay IP `192.168.100.20`.
 3. The peer table shows the lighthouse as established.
@@ -59,8 +80,8 @@ Each container runs the stock `nebula` binary with `cap_add: [NET_ADMIN]` and `d
 5. Disconnect. The tun device disappears (`ip link`) and the peers list is empty.
 
 ### Relay scenario (later)
-Block direct UDP between alice and the dev host with `iptables` in the container, enable `relay.use_relays` and `am_relay` on the lighthouse, and check that the peer row shows `relayed: true`.
+With every node on 127.0.0.1, direct UDP can't be blocked per host. Testing relays needs separate network namespaces or containers: block direct UDP between alice and the dev host, enable `relay.use_relays` and `am_relay` on the lighthouse, and check that the peer row shows `relayed: true`.
 
 ## CI
 - `go vet`, `golangci-lint`, and `go test ./...` on Linux, macOS, and Windows runners.
-- Linux only: a job that runs the docker test lab and a headless test of the service through its API (no GUI).
+- The real-Nebula tests above need no privileges, so they run in CI: `nebulactl.TestStartStop` on all three OSes, and `service.TestRealNebulaOverSocket` on Linux and macOS.

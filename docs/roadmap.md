@@ -10,11 +10,11 @@
 - [x] Service answers `GET /v1/version`. The GUI shows it in a window.
 
 ## M1: Service runs Nebula
-- [ ] `internal/nebulactl` wrapping `nebula.Main` and `Control`
-- [ ] Config store plus `PUT/GET/DELETE /v1/config` with inline-PKI validation
-- [ ] `connect`, `disconnect`, and `status` with the state machine
-- [ ] Log ring buffer plus `GET /v1/logs`
-- [ ] Test lab (`testlab/`, `make lab-up`). The service connects to it, tested with `curl --unix-socket`.
+- [x] `internal/nebulactl` wrapping `nebula.Main` and `Control`
+- [x] Config store plus `PUT/GET/DELETE /v1/config` with inline-PKI validation
+- [x] `connect`, `disconnect`, and `status` with the state machine
+- [x] Log ring buffer plus `GET /v1/logs`
+- [x] Test lab (`testlab/`, `make lab-up`). The service connects to it, tested with `curl --unix-socket`.
 
 ## M2: GUI basics
 - [ ] Config import with PEM inlining

@@ -32,6 +32,7 @@ func run() error {
 	listen := flag.String("listen", ipc.DefaultAddress(), "Unix socket path or Windows named pipe to listen on")
 	owner := flag.String("socket-owner", "", "user given access to the socket or pipe")
 	group := flag.String("socket-group", "", "group given access to the socket or pipe")
+	stateDir := flag.String("state-dir", service.DefaultStateDir(), "directory for the imported config (created 0700)")
 	dev := devFlag()
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
@@ -48,8 +49,28 @@ func run() error {
 			*owner = devSocketOwner()
 		}
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	// Logs go to stderr and to the ring buffer behind GET /v1/logs.
+	logs := service.NewLogBuffer(service.DefaultLogLines)
+	logger := slog.New(slog.NewMultiHandler(
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}),
+		logs.Handler(slog.LevelInfo),
+	))
 	slog.SetDefault(logger)
+
+	store, err := service.OpenStore(*stateDir)
+	if err != nil {
+		return err
+	}
+	srv, err := service.New(service.Options{
+		Version: version,
+		Logger:  logger,
+		Engine:  service.NebulaEngine{BuildVersion: version, Logger: logger},
+		Store:   store,
+		Logs:    logs,
+	})
+	if err != nil {
+		return err
+	}
 
 	l, err := ipc.Listen(*listen, ipc.ListenOptions{Owner: *owner, Group: *group})
 	if err != nil {
@@ -58,7 +79,5 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	srv := service.New(service.Options{Version: version, Logger: logger})
 	return srv.Serve(ctx, l)
 }

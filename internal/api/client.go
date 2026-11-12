@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/tucono/nebula-gui/internal/ipc"
@@ -68,6 +69,57 @@ func (c *Client) Version(ctx context.Context) (*VersionResponse, error) {
 func (c *Client) Status(ctx context.Context) (*StatusResponse, error) {
 	var s StatusResponse
 	if err := c.do(ctx, http.MethodGet, "/v1/status", nil, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// PutConfig calls PUT /v1/config.
+func (c *Client) PutConfig(ctx context.Context, yaml string) (*ConfigPutResponse, error) {
+	var r ConfigPutResponse
+	if err := c.do(ctx, http.MethodPut, "/v1/config", ConfigRequest{YAML: yaml}, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Config calls GET /v1/config. The returned YAML has pki.key redacted.
+func (c *Client) Config(ctx context.Context) (string, error) {
+	var r ConfigResponse
+	if err := c.do(ctx, http.MethodGet, "/v1/config", nil, &r); err != nil {
+		return "", err
+	}
+	return r.YAML, nil
+}
+
+// DeleteConfig calls DELETE /v1/config, which stops Nebula first if it is
+// running.
+func (c *Client) DeleteConfig(ctx context.Context) (*StatusResponse, error) {
+	return c.statusCall(ctx, http.MethodDelete, "/v1/config")
+}
+
+// Connect calls POST /v1/connect.
+func (c *Client) Connect(ctx context.Context) (*StatusResponse, error) {
+	return c.statusCall(ctx, http.MethodPost, "/v1/connect")
+}
+
+// Disconnect calls POST /v1/disconnect.
+func (c *Client) Disconnect(ctx context.Context) (*StatusResponse, error) {
+	return c.statusCall(ctx, http.MethodPost, "/v1/disconnect")
+}
+
+// Logs calls GET /v1/logs and returns lines with seq >= since.
+func (c *Client) Logs(ctx context.Context, since uint64) (*LogsResponse, error) {
+	var r LogsResponse
+	if err := c.do(ctx, http.MethodGet, "/v1/logs?since="+strconv.FormatUint(since, 10), nil, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (c *Client) statusCall(ctx context.Context, method, path string) (*StatusResponse, error) {
+	var s StatusResponse
+	if err := c.do(ctx, method, path, nil, &s); err != nil {
 		return nil, err
 	}
 	return &s, nil

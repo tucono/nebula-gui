@@ -5,8 +5,10 @@
 # local dev state
 /.dev-state/
 
-# test lab secrets — never commit
+# test lab secrets and generated state — never commit
 /testlab/pki/
+/testlab/run/
+/testlab/dev/
 *.key
 
 # Nebula certs, keys and real configs — never commit

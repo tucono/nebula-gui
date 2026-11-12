@@ -85,3 +85,38 @@ type Error struct {
 func (e *Error) Error() string {
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
+
+// ConfigRequest is the body of PUT /v1/config.
+type ConfigRequest struct {
+	// YAML is a full Nebula config with pki.ca, pki.cert and pki.key
+	// inlined as PEM.
+	YAML string `json:"yaml"`
+}
+
+// ConfigPutResponse is returned by PUT /v1/config.
+type ConfigPutResponse struct {
+	// RestartRequired is set when Nebula is running with the previous
+	// config. The service does not restart on its own.
+	RestartRequired bool `json:"restart_required"`
+}
+
+// ConfigResponse is returned by GET /v1/config. pki.key is redacted.
+type ConfigResponse struct {
+	YAML string `json:"yaml"`
+}
+
+// LogsResponse is returned by GET /v1/logs.
+type LogsResponse struct {
+	// Next is the seq to pass as ?since= to get only newer lines.
+	Next  uint64    `json:"next"`
+	Lines []LogLine `json:"lines"`
+}
+
+// LogLine is one entry from the service's log ring buffer.
+type LogLine struct {
+	Seq    uint64         `json:"seq"`
+	Time   time.Time      `json:"time"`
+	Level  string         `json:"level"`
+	Msg    string         `json:"msg"`
+	Fields map[string]any `json:"fields,omitempty"`
+}

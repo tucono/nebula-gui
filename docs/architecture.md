@@ -57,7 +57,7 @@ The GUI can be closed and reopened while the tunnel stays up. Each time it conne
   // later: ctrl.Stop()
   ```
 
-  Logs from the Nebula `logrus` logger go into a ring buffer so the GUI can show them.
+  Nebula (1.12+) logs through `log/slog`. Its logs and the service's own go into a ring buffer so the GUI can show them.
 
 - **Peers**: read from `ctrl.ListHostmapHosts(false)` (established tunnels) and `ctrl.ListHostmapHosts(true)` (pending handshakes), then mapped to the API's `Peer` type.
 - **Pinger**: sends ICMP echo requests to a peer's overlay IP. The packet goes through the tun device, which makes Nebula do a lighthouse lookup and a handshake. The service records the RTT. It uses `github.com/prometheus-community/pro-bing` in privileged mode, since the service already runs privileged.

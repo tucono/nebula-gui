@@ -4,8 +4,9 @@
 VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)
 LDFLAGS    := -X main.version=$(VERSION)
 DEV_SOCKET ?= $(XDG_RUNTIME_DIR)/nebula-guid.sock
+DEV_STATE  ?= .dev-state
 
-.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean
+.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import
 
 ## build: build both binaries into bin/
 build:
@@ -21,7 +22,7 @@ gui-bin:
 dev-service:
 	go build -tags dev -ldflags "$(LDFLAGS)" -o bin/nebula-guid-dev ./cmd/nebula-guid
 	sudo setcap cap_net_admin,cap_net_raw+ep bin/nebula-guid-dev
-	./bin/nebula-guid-dev --dev --listen "$(DEV_SOCKET)"
+	./bin/nebula-guid-dev --dev --listen "$(DEV_SOCKET)" --state-dir "$(DEV_STATE)"
 
 ## gui: run the GUI against the dev service
 gui:
@@ -29,6 +30,17 @@ gui:
 
 test:
 	go test ./...
+
+## lab-up / lab-down: start or stop the local Nebula test lab (docs/testing.md)
+lab-up:
+	testlab/lab.sh up
+
+lab-down:
+	testlab/lab.sh down
+
+## lab-import: send the lab's dev config to the dev service
+lab-import:
+	testlab/lab.sh import "$(DEV_SOCKET)"
 
 lint:
 	golangci-lint run
