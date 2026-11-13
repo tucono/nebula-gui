@@ -136,5 +136,5 @@ The service doesn't need CGO and cross-compiles normally.
 ## Code conventions
 - Format with `gofmt` and `goimports`. Lint with the `golangci-lint` defaults plus `errorlint` and `gosec`.
 - Wrap errors with context (`fmt.Errorf("start nebula: %w", err)`). API handlers map errors to the codes in [ipc-api.md](ipc-api.md).
-- Use `log/slog` for app logging. The service's logger, which Nebula also uses, writes to stderr and to the log ring buffer.
+- Use `log/slog` for app logging. The service's logger, which Nebula also uses, writes to stderr, to the log ring buffer (info and above) and to the log file in the state directory (debug and above).
 - Never log private keys or the full config.

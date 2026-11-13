@@ -25,7 +25,7 @@ func TestStatusIgnoresUnknownFields(t *testing.T) {
 }
 
 func TestVersionRoundTrip(t *testing.T) {
-	want := VersionResponse{ServiceVersion: "0.1.0", NebulaVersion: "1.12.0", APIVersion: APIVersion}
+	want := VersionResponse{ServiceVersion: "0.1.0", NebulaVersion: "1.12.0", APIVersion: APIVersion, InstanceID: "abc"}
 	b, err := json.Marshal(want)
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +66,32 @@ func TestClientVersion(t *testing.T) {
 	}
 	if v.ServiceVersion != "0.1.0" || v.APIVersion != 1 {
 		t.Fatalf("unexpected version: %+v", v)
+	}
+}
+
+func TestClientDiagnostics(t *testing.T) {
+	var queries []string
+	c := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/diagnostics" {
+			http.NotFound(w, r)
+			return
+		}
+		queries = append(queries, r.URL.RawQuery)
+		_, _ = w.Write([]byte(`{"instance_id":"abc","status":{"state":"stopped"},"config_summary":null,` +
+			`"log":["{\"msg\":\"service started\"}"],"log_truncated":true}`))
+	}))
+	for _, lines := range []int{0, 50} {
+		d, err := c.Diagnostics(context.Background(), lines)
+		if err != nil {
+			t.Fatalf("Diagnostics(%d): %v", lines, err)
+		}
+		if d.InstanceID != "abc" || d.Status.State != StateStopped || d.ConfigSummary != nil ||
+			len(d.Log) != 1 || d.Log[0] != `{"msg":"service started"}` || !d.LogTruncated {
+			t.Fatalf("Diagnostics(%d) = %+v", lines, d)
+		}
+	}
+	if len(queries) != 2 || queries[0] != "" || queries[1] != "lines=50" {
+		t.Fatalf("queries = %q", queries)
 	}
 }
 

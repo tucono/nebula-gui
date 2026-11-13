@@ -20,6 +20,8 @@ type VersionResponse struct {
 	ServiceVersion string `json:"service_version"`
 	NebulaVersion  string `json:"nebula_version"`
 	APIVersion     int    `json:"api_version"`
+	// InstanceID changes every time the service starts.
+	InstanceID string `json:"instance_id"`
 }
 
 // State is the Nebula manager's state.
@@ -60,6 +62,8 @@ type StatusResponse struct {
 	ListenPort  int        `json:"listen_port"`
 	StartedAt   *time.Time `json:"started_at"`
 	Configured  bool       `json:"configured"`
+	// InstanceID changes every time the service starts.
+	InstanceID string `json:"instance_id"`
 }
 
 // ErrorCode is a machine-readable error code.
@@ -148,6 +152,9 @@ type LogsResponse struct {
 	// Next is the seq to pass as ?since= to get only newer lines.
 	Next  uint64    `json:"next"`
 	Lines []LogLine `json:"lines"`
+	// InstanceID changes every time the service starts. Seq numbers from a
+	// different instance mean nothing to this one.
+	InstanceID string `json:"instance_id"`
 }
 
 // LogLine is one entry from the service's log ring buffer.
@@ -157,4 +164,53 @@ type LogLine struct {
 	Level  string         `json:"level"`
 	Msg    string         `json:"msg"`
 	Fields map[string]any `json:"fields,omitempty"`
+}
+
+// Limits for GET /v1/diagnostics?lines=N.
+const (
+	DefaultDiagnosticsLines = 300
+	MaxDiagnosticsLines     = 2000
+)
+
+// DiagnosticsResponse is returned by GET /v1/diagnostics. Nothing in it is
+// masked: the GUI masks what it shows or shares.
+type DiagnosticsResponse struct {
+	ServiceVersion string `json:"service_version"`
+	NebulaVersion  string `json:"nebula_version"`
+	APIVersion     int    `json:"api_version"`
+	InstanceID     string `json:"instance_id"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	// OSVersion is empty if unknown.
+	OSVersion string         `json:"os_version"`
+	Status    StatusResponse `json:"status"`
+	// ConfigSummary is nil when no config is stored, or the stored config
+	// can't be parsed.
+	ConfigSummary *ConfigSummary `json:"config_summary"`
+	// Log holds the last lines of the service log file as raw JSON
+	// strings, oldest first.
+	Log []string `json:"log"`
+	// LogTruncated is set when older lines were left out.
+	LogTruncated bool `json:"log_truncated"`
+}
+
+// ConfigSummary describes the stored config with counts and flags only. It
+// never contains certificates or keys.
+type ConfigSummary struct {
+	// Lighthouses are the underlay addresses of lighthouse.hosts, looked
+	// up in static_host_map. They may be DNS names.
+	Lighthouses  []string `json:"lighthouses"`
+	AmLighthouse bool     `json:"am_lighthouse"`
+	// Relays is set when relay.relays lists any relays.
+	Relays     bool `json:"relays"`
+	Punchy     bool `json:"punchy"`
+	ListenPort int  `json:"listen_port"`
+	TunRoutes  int  `json:"tun_routes"`
+	// UnsafeRoutes counts tun.unsafe_routes.
+	UnsafeRoutes     int `json:"unsafe_routes"`
+	FirewallInbound  int `json:"firewall_inbound"`
+	FirewallOutbound int `json:"firewall_outbound"`
+	// StaticHostNames are the DNS names in static_host_map, without ports,
+	// so the GUI can mask them.
+	StaticHostNames []string `json:"static_host_names"`
 }

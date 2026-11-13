@@ -67,7 +67,8 @@ func TestServeOverSocket(t *testing.T) {
 
 // TestRealNebulaOverSocket imports a generated config, connects and
 // disconnects a real embedded Nebula (tun disabled, so no privileges),
-// all through the API client.
+// all through the API client. Then it checks that the debug-level log
+// file holds Nebula's lines but no key material.
 func TestRealNebulaOverSocket(t *testing.T) {
 	nebulatest.SkipIfRace(t)
 	p, err := nebulatest.NewPKI("dev", "192.168.100.20/24", "users")
@@ -85,14 +86,24 @@ func TestRealNebulaOverSocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	logDir := filepath.Join(store.Dir(), "logs")
+	lf, err := OpenLogFile(logDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lf.Close() })
 	logs := NewLogBuffer(100)
-	logger := slog.New(logs.Handler(slog.LevelInfo))
+	logger := slog.New(slog.NewMultiHandler(
+		logs.Handler(slog.LevelInfo),
+		slog.NewJSONHandler(lf, &slog.HandlerOptions{Level: slog.LevelDebug}),
+	))
 	srv, err := New(Options{
 		Version: "test",
 		Logger:  logger,
 		Engine:  NebulaEngine{BuildVersion: "test", Logger: logger},
 		Store:   store,
 		Logs:    logs,
+		LogFile: lf,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -151,5 +162,37 @@ func TestRealNebulaOverSocket(t *testing.T) {
 	time.Sleep(200 * time.Millisecond) // see nebulactl.TestStartStop
 	if s, err = c.Disconnect(rctx); err != nil || s.State != api.StateStopped {
 		t.Fatalf("Disconnect = %+v, %v", s, err)
+	}
+
+	d, err := c.Diagnostics(rctx, api.MaxDiagnosticsLines)
+	if err != nil {
+		t.Fatalf("Diagnostics: %v", err)
+	}
+	if d.InstanceID != v.InstanceID || d.ConfigSummary == nil || d.ConfigSummary.FirewallInbound != 1 {
+		t.Fatalf("diagnostics = %+v", d)
+	}
+	logText := strings.Join(d.Log, "\n")
+	for _, want := range []string{`"service started"`, `"Nebula interface is active"`, `"nebula stopped"`} {
+		if !strings.Contains(logText, want) {
+			t.Errorf("log file has no %s line", want)
+		}
+	}
+
+	// Scan every file, not just the lines diagnostics returned. The markers
+	// are joined at run time so the repo's secret scan doesn't match them.
+	files, err := filepath.Glob(filepath.Join(logDir, LogFileName+"*"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("log files = %v, %v", files, err)
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(f) //nolint:gosec // a log file the test created
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, secret := range []string{"PRIVATE" + " KEY", "BEGIN " + "NEBULA"} {
+			if strings.Contains(string(b), secret) {
+				t.Errorf("%s contains %q", f, secret)
+			}
+		}
 	}
 }

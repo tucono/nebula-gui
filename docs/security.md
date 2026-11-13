@@ -14,12 +14,21 @@ The service runs with high privileges and accepts requests from local processes.
 | The config sets up harmful routing | `tun.routes` and `tun.unsafe_routes` can redirect any traffic. Show them clearly in the GUI before connecting, and consider a confirmation step for `unsafe_routes` and default routes (`0.0.0.0/0`). |
 | The config makes Nebula listen on privileged or unexpected ports, or names the tun device after an existing interface | Validate `listen.port` and `tun.dev`, or limit them to an allowlist. |
 | `sshd` debug console enabled by an imported config | `PUT /v1/config` rejects any `sshd.enabled` other than `false`. The console gives deep control over Nebula. |
-| The private key leaks through the API or logs | `GET /v1/config` redacts `pki.key`. Never log the config. The state directory is `0700` and the files are `0600`. |
+| The private key leaks through the API or logs | `GET /v1/config` redacts `pki.key`. Never log the config. The state directory is `0700` and the files are `0600`, log files included. A test runs a real Nebula with the log file at debug level and scans it for key material. |
 | Ping is used as a scanning or flooding tool | Limit `count` and `timeout_ms`, rate-limit requests, and accept only IPs inside the overlay subnets. |
 | An old or tampered service binary | Sign releases. The GUI checks `api_version` and shows the service version. |
 | **The updater is used to install malicious code as root/SYSTEM** | The manifest is signed with a minisign key whose public half is built into the binary. The artifact's SHA-256 must match the signed manifest. Platform code signatures are checked. Downgrades are refused. The feed URL can't be set over IPC, and the install endpoint takes only a version string ([updates.md](updates.md#verification-all-must-pass-before-installing)). |
 | A downloaded installer is swapped before it runs | Downloads go to the service's `0700` state directory. The hash is checked again immediately before running the installer. |
 | Privacy of update checks | The check sends only a plain HTTPS request to GitHub, with no identifiers or telemetry. Automatic checks can be turned off. |
+
+## Service log file
+
+The service keeps a persistent log so a troubleshooting report can include what happened before the GUI was opened.
+
+- **Where:** `<state dir>/logs/nebula-guid.jsonl`, for example `/var/lib/nebula-gui/logs/` on Linux. It rotates at 2 MiB and keeps `.1` and `.2`, so it takes at most about 6 MiB.
+- **Who can read it:** the service only. The directory is `0700` and the files are `0600`. On Windows, the log directory gets the same SYSTEM and Administrators DACL as the state directory. Users read it through `GET /v1/diagnostics`, behind the socket permissions.
+- **What's in it:** the service's lines and Nebula's, at debug level, as JSON Lines. That includes overlay and underlay IPs, host names and cert names, which is why the GUI masks reports before they're shared. It never includes certificates, keys or the config: rule 3 below applies to every log line. Successful `GET` requests aren't logged, because the GUI polls them every few seconds.
+- **If it can't be opened**, the service prints a warning and runs without it. A broken log must never stop the VPN.
 
 ## Rules for contributors
 1. New service endpoints must validate every input. Request bodies are capped (1 MiB, which is plenty for a config).

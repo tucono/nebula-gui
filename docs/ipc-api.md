@@ -58,9 +58,11 @@ The service finds reasons in this order: its own checks of the certs (expiry, si
 
 ### `GET /v1/version`
 ```json
-{ "service_version": "0.1.0", "nebula_version": "1.12.0", "api_version": 1 }
+{ "service_version": "0.1.0", "nebula_version": "1.12.0", "api_version": 1, "instance_id": "5J6M6K2RBFGXWEHJPJLDOIQE6I" }
 ```
 The GUI calls this first. If `api_version` doesn't match, it shows an "update required" message.
+
+`instance_id` is random and changes every time the service starts. The same value is in `/v1/status`, `/v1/logs` and `/v1/diagnostics`, and in the responses that return a status. When it changes, the service has restarted: the GUI checks `api_version` again and starts reading `/v1/logs` from `since=0`.
 
 ### `GET /v1/status`
 ```json
@@ -77,7 +79,8 @@ The GUI calls this first. If `api_version` doesn't match, it shows an "update re
   },
   "listen_port": 4242,
   "started_at": "2026-11-10T13:00:00Z",
-  "configured": true
+  "configured": true,
+  "instance_id": "5J6M6K2RBFGXWEHJPJLDOIQE6I"
 }
 ```
 
@@ -146,9 +149,38 @@ The first ping often times out while the handshake runs, so the GUI should prese
 
 ### `GET /v1/logs?since=<seq>`
 ```json
-{ "next": 1042, "lines": [ { "seq": 1041, "time": "…", "level": "info", "msg": "Handshake message sent", "fields": { … } } ] }
+{ "next": 1042, "lines": [ { "seq": 1041, "time": "…", "level": "info", "msg": "Handshake message sent", "fields": { … } } ], "instance_id": "…" }
 ```
-Ring buffer of the last 2000 entries at info level and above, from the service and from Nebula (Nebula's lines have `"component": "nebula"` in `fields`). Returns lines with `seq >= since`, oldest first. Pass `next` as `since` on the next call to get only new lines. If `since` is older than the buffer, the response starts at the oldest line kept.
+Ring buffer of the last 2000 entries at info level and above, from the service and from Nebula (Nebula's lines have `"component": "nebula"` in `fields`). Returns lines with `seq >= since`, oldest first. Pass `next` as `since` on the next call to get only new lines. If `since` is older than the buffer, the response starts at the oldest line kept. Sequence numbers start again at 0 when the service restarts, which `instance_id` shows.
+
+### `GET /v1/diagnostics?lines=N`
+Everything a troubleshooting report needs, in one call. `lines` is 1–2000 (default 300); larger values are capped at 2000.
+
+```json
+{
+  "service_version": "0.2.0", "nebula_version": "1.12.0", "api_version": 1,
+  "instance_id": "…",
+  "os": "linux", "arch": "amd64", "os_version": "Ubuntu 24.04.1 LTS",
+  "status": { …same as GET /v1/status… },
+  "config_summary": {
+    "lighthouses": ["203.0.113.7:4242"], "am_lighthouse": false,
+    "relays": false, "punchy": true, "listen_port": 4242,
+    "tun_routes": 0, "unsafe_routes": 0,
+    "firewall_inbound": 3, "firewall_outbound": 1,
+    "static_host_names": ["lighthouse.example.net"]
+  },
+  "log": [ "{\"time\":…,\"level\":\"INFO\",\"msg\":\"service started\",…}", … ],
+  "log_truncated": true
+}
+```
+
+- `os_version` is `PRETTY_NAME` from `/etc/os-release` on Linux, `sw_vers` on macOS, and the registry's `ProductName` and `DisplayVersion` on Windows. Empty if unknown.
+- `config_summary` is computed from the stored config, and is `null` when there is none. It holds counts, flags and addresses only, never certificates or keys:
+  - `lighthouses`: the underlay addresses of `lighthouse.hosts`, looked up in `static_host_map`. They may be DNS names.
+  - `relays`: `relay.relays` lists at least one relay. `punchy`: `punchy.punch`, or the old `punchy: true`.
+  - `static_host_names`: the DNS names in `static_host_map`, without ports, so the GUI can mask them.
+- `log` holds the last `N` lines of the [service log file](security.md#service-log-file) as raw JSON strings, oldest first, read across the rotated files. `log_truncated` is `true` when older lines were left out. A line cut short by a crash is returned as it is.
+- **Nothing is masked.** The GUI masks what it shows or shares, so the same data can produce both versions of a report. The endpoint is behind the same socket permissions as every other endpoint.
 
 ## Updates
 

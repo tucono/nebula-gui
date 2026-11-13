@@ -8,11 +8,14 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -37,6 +40,9 @@ type Options struct {
 	Store *Store
 	// Logs is served by GET /v1/logs. If nil, an empty buffer is used.
 	Logs *LogBuffer
+	// LogFile is the persistent log that GET /v1/diagnostics reads. The
+	// caller feeds it through Logger. If nil, diagnostics has no log.
+	LogFile *LogFile
 }
 
 // Server serves the API.
@@ -47,6 +53,12 @@ type Server struct {
 	engine  Engine
 	mgr     *manager
 	logs    *LogBuffer
+	logFile *LogFile
+
+	// instanceID is random per Server, so clients can tell that the
+	// service restarted.
+	instanceID string
+	osVersion  string
 }
 
 // New returns a Server. It loads the stored config, if any.
@@ -60,6 +72,10 @@ func New(opts Options) (*Server, error) {
 		mux:     http.NewServeMux(),
 		engine:  opts.Engine,
 		logs:    opts.Logs,
+		logFile: opts.LogFile,
+
+		instanceID: rand.Text(),
+		osVersion:  osVersion(),
 	}
 	if s.log == nil {
 		s.log = slog.Default()
@@ -72,6 +88,11 @@ func New(opts Options) (*Server, error) {
 		return nil, err
 	}
 	s.mgr = mgr
+	s.log.Info("service started",
+		"service_version", s.version, "nebula_version", s.engine.Version(),
+		"api_version", api.APIVersion, "instance_id", s.instanceID,
+		"os", runtime.GOOS, "arch", runtime.GOARCH, "os_version", s.osVersion,
+		"pid", os.Getpid())
 
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
 	s.mux.HandleFunc("GET /v1/status", s.handleStatus)
@@ -81,6 +102,7 @@ func New(opts Options) (*Server, error) {
 	s.mux.HandleFunc("POST /v1/connect", s.handleConnect)
 	s.mux.HandleFunc("POST /v1/disconnect", s.handleDisconnect)
 	s.mux.HandleFunc("GET /v1/logs", s.handleLogs)
+	s.mux.HandleFunc("GET /v1/diagnostics", s.handleDiagnostics)
 	return s, nil
 }
 
@@ -88,13 +110,35 @@ func New(opts Options) (*Server, error) {
 func (s *Server) Close() { s.mgr.shutdown() }
 
 // Handler returns the API's HTTP handler.
+//
+// Each request is logged at debug level, except successful GETs: the GUI
+// polls those every few seconds, and they would push Nebula's lines out of
+// the log file.
 func (s *Server) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		s.mux.ServeHTTP(w, r)
-		s.log.Debug("request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		s.mux.ServeHTTP(sw, r)
+		if r.Method == http.MethodGet && sw.status < 400 {
+			return
+		}
+		s.log.Debug("request", "method", r.Method, "path", r.URL.Path,
+			"status", sw.status, "duration", time.Since(start))
 	})
 }
+
+// statusWriter records the response status.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // Serve serves the API on l until ctx is cancelled, then shuts down
 // gracefully and stops Nebula. It closes l.
@@ -131,11 +175,19 @@ func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 		ServiceVersion: s.version,
 		NebulaVersion:  s.engine.Version(),
 		APIVersion:     api.APIVersion,
+		InstanceID:     s.instanceID,
 	})
 }
 
+// status is the manager's status plus the instance ID.
+func (s *Server) status() api.StatusResponse {
+	st := s.mgr.status()
+	st.InstanceID = s.instanceID
+	return st
+}
+
 func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
-	s.writeJSON(w, http.StatusOK, s.mgr.status())
+	s.writeJSON(w, http.StatusOK, s.status())
 }
 
 func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +230,7 @@ func (s *Server) handleDeleteConfig(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	s.log.Info("config deleted")
-	s.writeJSON(w, http.StatusOK, s.mgr.status())
+	s.writeJSON(w, http.StatusOK, s.status())
 }
 
 func (s *Server) handleConnect(w http.ResponseWriter, _ *http.Request) {
@@ -186,7 +238,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, _ *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.mgr.status())
+	s.writeJSON(w, http.StatusOK, s.status())
 }
 
 func (s *Server) handleDisconnect(w http.ResponseWriter, _ *http.Request) {
@@ -194,7 +246,7 @@ func (s *Server) handleDisconnect(w http.ResponseWriter, _ *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.mgr.status())
+	s.writeJSON(w, http.StatusOK, s.status())
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +259,9 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		since = n
 	}
-	s.writeJSON(w, http.StatusOK, s.logs.Since(since))
+	resp := s.logs.Since(since)
+	resp.InstanceID = s.instanceID
+	s.writeJSON(w, http.StatusOK, resp)
 }
 
 // writeErr maps an error from the manager to an API error. Unknown errors

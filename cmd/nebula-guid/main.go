@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/tucono/nebula-gui/internal/ipc"
@@ -49,24 +50,38 @@ func run() error {
 			*owner = devSocketOwner()
 		}
 	}
-	// Logs go to stderr and to the ring buffer behind GET /v1/logs.
-	logs := service.NewLogBuffer(service.DefaultLogLines)
-	logger := slog.New(slog.NewMultiHandler(
-		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}),
-		logs.Handler(slog.LevelInfo),
-	))
-	slog.SetDefault(logger)
-
+	// The store creates and restricts the state directory, which holds the
+	// log directory too.
 	store, err := service.OpenStore(*stateDir)
 	if err != nil {
 		return err
 	}
+
+	// Logs go to stderr, to the ring buffer behind GET /v1/logs, and to the
+	// log file behind GET /v1/diagnostics. A log file that can't be opened
+	// must never stop the VPN, so the service runs on without it.
+	logs := service.NewLogBuffer(service.DefaultLogLines)
+	handlers := []slog.Handler{
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}),
+		logs.Handler(slog.LevelInfo),
+	}
+	logFile, err := service.OpenLogFile(filepath.Join(store.Dir(), "logs"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "nebula-guid: warning: running without a log file:", err)
+	} else {
+		defer func() { _ = logFile.Close() }()
+		handlers = append(handlers, slog.NewJSONHandler(logFile, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	}
+	logger := slog.New(slog.NewMultiHandler(handlers...))
+	slog.SetDefault(logger)
+
 	srv, err := service.New(service.Options{
 		Version: version,
 		Logger:  logger,
 		Engine:  service.NebulaEngine{BuildVersion: version, Logger: logger},
 		Store:   store,
 		Logs:    logs,
+		LogFile: logFile,
 	})
 	if err != nil {
 		return err

@@ -117,6 +117,20 @@ func (c *Client) Logs(ctx context.Context, since uint64) (*LogsResponse, error) 
 	return &r, nil
 }
 
+// Diagnostics calls GET /v1/diagnostics. lines <= 0 asks for the default
+// number of log lines.
+func (c *Client) Diagnostics(ctx context.Context, lines int) (*DiagnosticsResponse, error) {
+	path := "/v1/diagnostics"
+	if lines > 0 {
+		path += "?lines=" + strconv.Itoa(lines)
+	}
+	var r DiagnosticsResponse
+	if err := c.do(ctx, http.MethodGet, path, nil, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 func (c *Client) statusCall(ctx context.Context, method, path string) (*StatusResponse, error) {
 	var s StatusResponse
 	if err := c.do(ctx, method, path, nil, &s); err != nil {
