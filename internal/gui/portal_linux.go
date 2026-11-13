@@ -4,12 +4,14 @@
 package gui
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -47,7 +49,7 @@ type portalRule struct {
 // request's Response signal before calling OpenFile, using the request
 // path the portal will use for its handle_token. Otherwise a quick answer
 // could be missed.
-func portalOpenFile(parent string, req openRequest) (string, error) {
+func portalOpenFile(ctx context.Context, parent string, req openRequest) (string, error) {
 	conn, err := dbus.SessionBusPrivate()
 	if err != nil {
 		return "", &errNoNativePicker{Err: err}
@@ -75,21 +77,43 @@ func portalOpenFile(parent string, req openRequest) (string, error) {
 	}
 
 	var handle dbus.ObjectPath
-	call := conn.Object(portalDest, portalPath).Call(portalOpenCall, 0, parent, req.Title, portalOptions(req, token))
+	call := conn.Object(portalDest, portalPath).CallWithContext(ctx, portalOpenCall, 0, parent, req.Title, portalOptions(req, token))
 	if err := call.Store(&handle); err != nil {
+		if ctx.Err() != nil {
+			// Closing while the portal was still opening the picker.
+			closeRequest(conn, want)
+			return "", ctx.Err()
+		}
 		// No portal, or one without a file chooser.
 		return "", &errNoNativePicker{Err: err}
 	}
 
-	for sig := range signals {
-		// Portals before 0.9 ignore handle_token; the handle they return
-		// is the request path then.
-		if sig.Name != portalResponse || (sig.Path != want && sig.Path != handle) {
-			continue
+	for {
+		select {
+		case sig, ok := <-signals:
+			if !ok {
+				return "", errors.New("file chooser: session bus connection closed")
+			}
+			// Portals before 0.9 ignore handle_token; the handle they
+			// return is the request path then.
+			if sig.Name != portalResponse || (sig.Path != want && sig.Path != handle) {
+				continue
+			}
+			return parseResponse(sig.Body)
+		case <-ctx.Done():
+			// The picker is the desktop's window: it stays open after
+			// the app exits unless the request is closed.
+			closeRequest(conn, handle)
+			return "", ctx.Err()
 		}
-		return parseResponse(sig.Body)
 	}
-	return "", errors.New("file chooser: session bus connection closed")
+}
+
+// closeRequest ends a portal request and the picker it shows.
+func closeRequest(conn *dbus.Conn, handle dbus.ObjectPath) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = conn.Object(portalDest, handle).CallWithContext(ctx, portalRequest+".Close", 0).Err
 }
 
 // portalOptions builds OpenFile's options dictionary.

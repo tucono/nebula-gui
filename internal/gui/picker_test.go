@@ -4,9 +4,11 @@
 package gui
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
+	"time"
 )
 
 // fakeNative records requests and answers with the next result.
@@ -17,7 +19,7 @@ type fakeNative struct {
 	parents []string
 }
 
-func (f *fakeNative) open(parent string, req openRequest) (string, error) {
+func (f *fakeNative) open(_ context.Context, parent string, req openRequest) (string, error) {
 	f.reqs = append(f.reqs, req)
 	f.parents = append(f.parents, parent)
 	i := len(f.reqs) - 1
@@ -116,5 +118,38 @@ func TestChooseFileUsesNativePicker(t *testing.T) {
 	}
 	if len(svc.put) != 1 {
 		t.Fatalf("not imported with the chosen key: %v", svc.takeCalls())
+	}
+}
+
+func TestCloseEndsNativePicker(t *testing.T) {
+	m, poll := importWindow(t, newFakeService(), nil)
+	poll()
+	m.spawn = func(f func()) { go f() } // the picker blocks, as the real one does
+	opened, ended := make(chan struct{}), make(chan error, 1)
+	m.nativeOpen = func(ctx context.Context, _ string, _ openRequest) (string, error) {
+		close(opened)
+		<-ctx.Done() // the real picker closes the portal request here
+		ended <- ctx.Err()
+		return "/home/alice/late.yml", ctx.Err()
+	}
+	called := false
+	m.pickFile(openRequest{}, func(string) { called = true })
+	<-opened
+
+	start := time.Now()
+	m.close()
+	if d := time.Since(start); d >= closeWait {
+		t.Fatalf("close waited %v for the picker", d)
+	}
+	select {
+	case err := <-ended:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("picker ended with %v", err)
+		}
+	default:
+		t.Fatal("close returned before the picker ended")
+	}
+	if called {
+		t.Fatal("the picked file was used after close")
 	}
 }

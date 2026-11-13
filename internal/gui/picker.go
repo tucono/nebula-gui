@@ -4,6 +4,7 @@
 package gui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -27,11 +28,12 @@ type openRequest struct {
 }
 
 // nativeOpenFunc shows the operating system's file picker and blocks until
-// the user closes it. It returns the chosen path, or "" if the user
+// the user closes it, or until ctx ends: then it closes the picker and
+// returns ctx's error. It returns the chosen path, or "" if the user
 // cancelled. An errNoNativePicker means the native picker isn't available
 // and the app should use its own. parent identifies the app's window to
 // the OS, or is empty.
-type nativeOpenFunc func(parent string, req openRequest) (string, error)
+type nativeOpenFunc func(ctx context.Context, parent string, req openRequest) (string, error)
 
 // errNoNativePicker wraps the reason the native picker couldn't be shown.
 type errNoNativePicker struct{ Err error }
@@ -55,9 +57,14 @@ func (m *mainWindow) pickFile(req openRequest, done func(path string)) {
 	}
 	m.picking = true
 	parent := m.windowHandle()
-	open := m.nativeOpen
+	open, ctx := m.nativeOpen, m.ctx
+	m.pickers.Add(1)
 	m.spawn(func() {
-		path, err := open(parent, req)
+		defer m.pickers.Done()
+		path, err := open(ctx, parent, req)
+		if ctx.Err() != nil {
+			return // the app is closing; there's no window to update
+		}
 		fyne.Do(func() {
 			m.picking = false
 			var nn *errNoNativePicker

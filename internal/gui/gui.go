@@ -6,7 +6,6 @@
 package gui
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -41,10 +40,9 @@ func Run(opts Options) {
 
 	a := app.NewWithID(appID)
 	m := newMainWindow(a, opts.Client, log, opts.AppVersion)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	m.start(ctx)
+	m.start()
 	m.w.ShowAndRun()
+	m.close()
 	log.Add("app closed")
 }
 

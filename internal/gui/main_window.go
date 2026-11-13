@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -74,6 +75,12 @@ type mainWindow struct {
 	picking bool
 	// noNative is set once the native picker has failed to open.
 	noNative bool
+
+	// ctx ends when the window closes; it stops the poller and closes an
+	// open native picker. pickers counts the native pickers still open.
+	ctx     context.Context
+	cancel  context.CancelFunc
+	pickers sync.WaitGroup
 }
 
 func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *mainWindow {
@@ -89,6 +96,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		nativeOpen: platformOpen,
 		in:         statusInput{GOOS: runtime.GOOS},
 	}
+	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.poller = newPoller(c, log, m.gate)
 
 	m.banner = newProblemView(problemHandlers{
@@ -154,11 +162,31 @@ func (m *mainWindow) now() statusInput {
 	return in
 }
 
-// start polls until ctx ends.
-func (m *mainWindow) start(ctx context.Context) {
-	go m.poller.run(ctx, func(r pollResult) {
+// start polls until the window closes.
+func (m *mainWindow) start() {
+	go m.poller.run(m.ctx, func(r pollResult) {
 		fyne.Do(func() { m.applyPoll(r) })
 	})
+}
+
+// closeWait is how long close waits for a native picker to be closed.
+const closeWait = 2 * time.Second
+
+// close stops what the window started, after the app's loop has ended.
+// The desktop's picker is a separate window that outlives the app unless
+// it's told to close, so close waits briefly for that message to go out.
+func (m *mainWindow) close() {
+	m.cancel()
+	done := make(chan struct{})
+	go func() {
+		m.pickers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(closeWait):
+		m.log.Add("file picker didn't close in time")
+	}
 }
 
 func (m *mainWindow) applyPoll(r pollResult) {
