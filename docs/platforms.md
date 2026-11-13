@@ -9,6 +9,9 @@
 - **Socket access:** the installer creates a `nebula-gui` group. Users are added to it to control the VPN.
 - **Packaging:** `.deb` and `.rpm` through [nfpm](https://nfpm.goreleaser.com/). Flatpak is a poor fit because the service needs host privileges, so leave it for later.
 - **Conflicts:** if the system `nebula` package (`nebula.service`) is running on the same port or tun name, starting fails. Detect this and show a clear error.
+- **File picker:** the GUI uses the desktop's file chooser through the XDG Desktop Portal, and falls back to Fyne's picker without one (see `internal/gui/portal_linux.go`).
+  - **Known issue on COSMIC:** if the app quits while the picker is open, the picker stays open. The GUI closes the portal request (`Request.Close`), but `xdg-desktop-portal-cosmic` (seen with 1.11.0) doesn't register a request object for its file chooser, so the call does nothing. Its dialog only closes when the user picks a file or cancels. The leftover picker is harmless: nothing it returns reaches the app. GNOME and KDE close the picker. Not yet reported upstream.
+  - The picker opens as a separate window rather than on top of the app: under XWayland the portal gets an X11 handle that COSMIC doesn't attach to, and Fyne offers no Wayland handle.
 
 ## macOS
 - **Tun device:** Nebula uses `utun`, which needs root.
