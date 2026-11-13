@@ -17,10 +17,15 @@
 - [x] Test lab (`testlab/`, `make lab-up`). The service connects to it, tested with `curl --unix-socket`.
 
 ## M2: GUI basics
+Detailed plan: [m2-plan.md](m2-plan.md).
+
 - [ ] Config import with PEM inlining
 - [ ] Status header plus Connect/Disconnect
 - [ ] Log view
 - [ ] Clear errors when the service isn't installed or running, or the user lacks permission
+- [ ] Plain-language errors with direct fixes, based on error reasons from the service
+- [ ] Persistent service log plus `GET /v1/diagnostics`
+- [ ] "Get help" troubleshooting report for AI assistants, with private network details masked
 
 ## M3: Peers and ping
 - [ ] `GET /v1/peers`, `POST /v1/peers/{ip}/close`
@@ -45,6 +50,7 @@
 ## M5: Polish (v1.0)
 - [ ] Warnings for `routes`/`unsafe_routes` before connecting
 - [ ] Cert expiry warnings
+- [ ] Import a `.zip` with the config and its key files
 - [ ] Code signing and notarization
 - [ ] User docs and screenshots
 
