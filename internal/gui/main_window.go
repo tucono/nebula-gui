@@ -11,6 +11,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -22,6 +23,8 @@ type actionClient interface {
 	serviceClient
 	Connect(ctx context.Context) (*api.StatusResponse, error)
 	Disconnect(ctx context.Context) (*api.StatusResponse, error)
+	PutConfig(ctx context.Context, yaml string) (*api.ConfigPutResponse, error)
+	DeleteConfig(ctx context.Context) (*api.StatusResponse, error)
 	Addr() string
 }
 
@@ -39,10 +42,13 @@ type mainWindow struct {
 	// spawn runs an action's call off the UI goroutine. Tests replace it
 	// to run the call in place.
 	spawn func(func())
+	// readFile reads the files a config refers to. Tests replace it.
+	readFile func(string) ([]byte, error)
 
 	in         statusInput
 	version    *api.VersionResponse
 	lastBanner problemID
+	importing  bool
 
 	banner   *problemView
 	waiting  *widget.Label
@@ -54,6 +60,8 @@ type mainWindow struct {
 	valid    *widget.Label
 	uptime   *widget.Label
 	button   *widget.Button
+	importB  *widget.Button
+	removeB  *widget.Button
 	footer   *widget.RichText
 }
 
@@ -66,6 +74,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		gate:       &statusGate{},
 		appVersion: appVersion,
 		spawn:      func(f func()) { go f() },
+		readFile:   readCapped,
 		in:         statusInput{GOOS: runtime.GOOS},
 	}
 	m.poller = newPoller(c, log, m.gate)
@@ -91,6 +100,9 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		m.act(describeStatus(m.now()).ButtonAction)
 	})
 	m.button.Importance = widget.HighImportance
+	m.importB = widget.NewButton("Import config…", m.importConfig)
+	m.removeB = widget.NewButton("Remove config…", m.confirmRemove)
+	m.removeB.Importance = widget.LowImportance
 	m.header = container.NewVBox(
 		container.NewHBox(m.headline, m.spinner),
 		widget.NewForm(
@@ -99,7 +111,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 			widget.NewFormItem("Valid until", m.valid),
 			widget.NewFormItem("Connected for", m.uptime),
 		),
-		container.NewHBox(m.button),
+		container.NewHBox(m.button, m.importB, m.removeB),
 	)
 	m.header.Hide()
 
@@ -159,6 +171,9 @@ func (m *mainWindow) applyStatus(st *api.StatusResponse) {
 	if st.State == api.StateRunning || st.State == api.StateStarting {
 		m.in.Action = nil // the problem it showed is over
 	}
+	if st.State != api.StateRunning {
+		m.in.NewConfig = false // the next connect uses the new config
+	}
 }
 
 // render updates the widgets from m.in.
@@ -195,11 +210,9 @@ func (m *mainWindow) render() {
 		m.valid.SetText(v.ValidUntil)
 		m.uptime.SetText(v.Uptime)
 		m.button.SetText(v.Button)
-		if v.ButtonEnabled {
-			m.button.Enable()
-		} else {
-			m.button.Disable()
-		}
+		setEnabled(m.button, v.ButtonEnabled)
+		setEnabled(m.importB, v.ManageEnabled && !m.importing)
+		setEnabled(m.removeB, v.ManageEnabled && !m.importing)
 	}
 	m.header.Refresh()
 
@@ -232,11 +245,19 @@ func (m *mainWindow) versionsLine() string {
 	return fmt.Sprintf("app %s, service %s, service address %s", m.appVersion, svc, m.c.Addr())
 }
 
-// supportedFix lists the fixes the window can do so far. The import fixes
-// come with the import dialog (M2 step 7).
+func setEnabled(b *widget.Button, on bool) {
+	if on {
+		b.Enable()
+	} else {
+		b.Disable()
+	}
+}
+
+// supportedFix lists the fixes the banner offers. The fixes that continue
+// an import are in its dialog (importFixes).
 func supportedFix(k fixKind) bool {
 	switch k {
-	case fixRetry, fixOpenDownloads, fixConnect, fixReconnect:
+	case fixRetry, fixOpenDownloads, fixConnect, fixReconnect, fixImport:
 		return true
 	default:
 		return false
@@ -253,7 +274,22 @@ func (m *mainWindow) fix(f fixAction) {
 		m.act(actConnect)
 	case fixReconnect:
 		m.act(actReconnect)
+	case fixImport:
+		m.importConfig()
 	}
+}
+
+// confirmRemove asks before deleting the stored config.
+func (m *mainWindow) confirmRemove() {
+	msg := "You'll need the config file again to reconnect."
+	if m.in.Status != nil && m.in.Status.State == api.StateRunning {
+		msg = "This disconnects you. " + msg
+	}
+	dialog.ShowConfirm("Remove this config?", msg, func(ok bool) {
+		if ok {
+			m.act(actRemoveConfig)
+		}
+	}, m.w)
 }
 
 // dismiss clears a problem from a failed action, and the service's error
@@ -272,7 +308,7 @@ func (m *mainWindow) dismiss(*problem) {
 // disabled until it returns; polling goes on meanwhile, so the header can
 // show "Disconnecting…".
 func (m *mainWindow) act(a action) {
-	if a == actNone || m.in.Acting != actNone {
+	if a == actNone || m.in.Acting != actNone || m.importing {
 		return
 	}
 	m.in.Acting, m.in.Action = a, nil
@@ -291,13 +327,16 @@ func (m *mainWindow) act(a action) {
 		fyne.Do(func() {
 			m.in.Acting = actNone
 			if err != nil {
-				p := problemFor(err, problemContext{Op: opConnect, Cert: cert, GOOS: m.in.GOOS})
+				p := problemFor(err, problemContext{Op: a.op(), Cert: cert, GOOS: m.in.GOOS})
 				p.Dismiss = true
 				m.in.Action = p
 				m.log.Add(a.String()+" failed", "problem", string(p.ID), "error", errorDetails(err))
 				m.poller.Poke() // the status may have changed too
 			} else {
 				m.log.Add(a.String()+" done", "state", string(st.State))
+				if a == actReconnect {
+					m.in.NewConfig = false // running with the new config now
+				}
 				if m.gate.Accept(seq) {
 					m.applyStatus(st)
 				}
@@ -320,6 +359,8 @@ func runAction(ctx context.Context, c actionClient, a action) (*api.StatusRespon
 			return nil, err
 		}
 		return c.Connect(ctx)
+	case actRemoveConfig:
+		return c.DeleteConfig(ctx)
 	default:
 		return nil, fmt.Errorf("unknown action %d", a)
 	}

@@ -23,7 +23,10 @@ type fakeService struct {
 	apiVer    int
 	instance  string
 	state     api.State
-	configErr error // returned by Connect and Disconnect when set
+	configErr error   // returned by Connect and Disconnect when set
+	putErrs   []error // returned by the next PutConfig calls, in order
+	put       []string
+	unconfig  bool
 	calls     []string
 }
 
@@ -54,7 +57,34 @@ func (f *fakeService) Status(context.Context) (*api.StatusResponse, error) {
 }
 
 func (f *fakeService) statusLocked() *api.StatusResponse {
+	if f.unconfig {
+		return &api.StatusResponse{State: f.state, InstanceID: f.instance}
+	}
 	return &api.StatusResponse{State: f.state, Configured: true, InstanceID: f.instance, OverlayIPs: []string{"192.168.100.20/24"}}
+}
+
+func (f *fakeService) PutConfig(_ context.Context, yaml string) (*api.ConfigPutResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "put")
+	if len(f.putErrs) > 0 {
+		err := f.putErrs[0]
+		f.putErrs = f.putErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
+	f.put = append(f.put, yaml)
+	f.unconfig = false
+	return &api.ConfigPutResponse{RestartRequired: f.state == api.StateRunning}, nil
+}
+
+func (f *fakeService) DeleteConfig(context.Context) (*api.StatusResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "delete")
+	f.unconfig, f.state = true, api.StateStopped
+	return f.statusLocked(), nil
 }
 
 func (f *fakeService) Connect(context.Context) (*api.StatusResponse, error) {

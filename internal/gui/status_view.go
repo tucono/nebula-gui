@@ -20,6 +20,8 @@ const (
 	actDisconnect
 	// actReconnect is Disconnect then Connect, to use a new config.
 	actReconnect
+	// actRemoveConfig deletes the stored config.
+	actRemoveConfig
 )
 
 func (a action) String() string {
@@ -30,9 +32,19 @@ func (a action) String() string {
 		return "disconnect"
 	case actReconnect:
 		return "reconnect"
+	case actRemoveConfig:
+		return "remove config"
 	default:
 		return "none"
 	}
+}
+
+// op is what the action means for choosing a problem.
+func (a action) op() op {
+	if a == actRemoveConfig {
+		return opOther
+	}
+	return opConnect
 }
 
 // statusInput is everything the window knows about the service.
@@ -48,6 +60,9 @@ type statusInput struct {
 	// It stays until the user acts again, dismisses it, or the connection
 	// starts.
 	Action *problem
+	// NewConfig is set when an import replaced the config of a running
+	// connection, until the connection stops.
+	NewConfig bool
 	// Acting is the action in flight.
 	Acting action
 	Now    time.Time
@@ -73,6 +88,8 @@ type statusView struct {
 	Button        string
 	ButtonAction  action
 	ButtonEnabled bool
+	// ManageEnabled enables Import config… and Remove config….
+	ManageEnabled bool
 }
 
 // describeStatus turns what the window knows into what it shows. Problems
@@ -94,6 +111,9 @@ func describeStatus(in statusInput) statusView {
 	v := statusView{Banner: in.Action}
 	if v.Banner == nil {
 		v.Banner = statusProblem(st, in.GOOS)
+	}
+	if v.Banner == nil && in.NewConfig && st.State == api.StateRunning {
+		v.Banner = newConfigSaved()
 	}
 	if st.State == api.StateError {
 		// The banner says what went wrong and offers Connect again and
@@ -129,8 +149,11 @@ func describeStatus(in statusInput) statusView {
 
 	// While an action is in flight the button stays disabled, and the
 	// headline says what's happening even before the status catches up.
+	v.ManageEnabled = in.Acting == actNone
 	switch in.Acting {
 	case actNone:
+	case actRemoveConfig:
+		v.Headline, v.Busy, v.ButtonEnabled = "Removing the config…", true, false
 	case actDisconnect:
 		v.Headline, v.Busy, v.ButtonEnabled = "Disconnecting…", true, false
 	default:

@@ -56,6 +56,12 @@ func TestDescribeStatus(t *testing.T) {
 			banner: probTunUnavailable},
 		{name: "failed action over stopped", in: statusInput{Status: st(api.StateStopped), Action: failed},
 			banner: probConnectFailed, header: true, headline: "Not connected", button: "Connect", act: actConnect, enabled: true},
+		{name: "new config while running", in: statusInput{Status: st(api.StateRunning), NewConfig: true},
+			banner: probNewConfigSaved, header: true, headline: "Connected", button: "Disconnect", act: actDisconnect, enabled: true},
+		{name: "new config ignored when stopped", in: statusInput{Status: st(api.StateStopped), NewConfig: true},
+			header: true, headline: "Not connected", button: "Connect", act: actConnect, enabled: true},
+		{name: "remove in flight", in: statusInput{Status: st(api.StateStopped), Acting: actRemoveConfig},
+			header: true, headline: "Removing the config…", busy: true, button: "Connect", act: actConnect},
 		{name: "expired cert", in: statusInput{Status: &api.StatusResponse{State: api.StateStopped, Configured: true, Cert: expired}},
 			banner: probCertExpired, header: true, headline: "Not connected", button: "Connect", act: actConnect, enabled: true},
 	}
@@ -75,6 +81,9 @@ func TestDescribeStatus(t *testing.T) {
 			}
 			if v.Headline != tt.headline || v.Busy != tt.busy || v.Button != tt.button || v.ButtonAction != tt.act || v.ButtonEnabled != tt.enabled {
 				t.Fatalf("got %+v", v)
+			}
+			if v.ManageEnabled != (tt.in.Acting == actNone) {
+				t.Fatalf("ManageEnabled %v while acting %v", v.ManageEnabled, tt.in.Acting)
 			}
 		})
 	}

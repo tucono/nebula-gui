@@ -52,11 +52,14 @@ These tests skip under `-race`. Nebula 1.12.0's disabled tun device has a data r
 make lab-up        # build nebula + nebula-cert at the pinned version, create the PKI, start the nodes
 make dev-service   # other terminal: the service under test (needs CAP_NET_ADMIN)
 make lab-import    # PUT testlab/dev/config.yml (inline PKI) to the dev service
+testlab/lab.sh broken  # bad configs for the GUI import, in testlab/dev/broken/
 make lab-down
 testlab/lab.sh clean   # also deletes the generated PKI
 ```
 
-`lab.sh up` writes the PKI to `testlab/pki/`, node configs and logs to `testlab/run/`, and the dev config to `testlab/dev/config.yml`. All three are gitignored. Never commit them.
+`lab.sh up` writes the PKI to `testlab/pki/`, node configs and logs to `testlab/run/`, and the dev config to `testlab/dev/`, twice: `config.yml` with the PKI inline (for `lab-import` and curl), and `config.paths.yml` with the PKI as relative paths (for the GUI's **Import config…**, which inlines them). All three directories are gitignored. Never commit them.
+
+`lab.sh broken` writes configs the GUI import should refuse, each with its own message, to `testlab/dev/broken/`: `expired.yml` (a host cert that has expired), `key-mismatch.yml` (dev's cert with alice's key), `missing-key.yml` (a key path from the admin's machine), `sshd.yml` (the debug console turned on) and `notes.txt` (not a config).
 
 ### Smoke test with curl (M1)
 ```sh
@@ -89,7 +92,7 @@ Unit and Fyne tests can't show how the window behaves on a real desktop: layout,
 Note which desktop and session the check ran on (for example COSMIC on Wayland), because compositors differ.
 
 ### GUI smoke test (M2/M3)
-1. Import `testlab/dev/config.yml` in the GUI and connect.
+1. Import `testlab/dev/config.paths.yml` in the GUI and connect.
 2. The status shows `running` and overlay IP `192.168.100.20`.
 3. The peer table shows the lighthouse as established.
 4. Ping `192.168.100.10`. The first attempt may say "connecting…", and after that alice appears as established with an RTT.

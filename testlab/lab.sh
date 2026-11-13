@@ -11,6 +11,7 @@
 #   lab.sh down            stop the nodes
 #   lab.sh status          show which nodes are running
 #   lab.sh import SOCKET   PUT testlab/dev/config.yml to the service on SOCKET
+#   lab.sh broken          write bad configs to testlab/dev/broken/ for the GUI import
 #   lab.sh clean           stop the nodes and delete all generated state, PKI included
 #
 # Everything generated (pki/, run/, dev/) is gitignored. Never commit it.
@@ -125,8 +126,25 @@ EOF
 # indent_file FILE prints FILE indented for a YAML block scalar.
 indent_file() { sed 's/^/    /' "$1"; }
 
-# dev_config writes the config for the service under test, with the PKI
-# inlined as the service requires.
+# dev_rest prints the dev config after its pki section.
+dev_rest() {
+	cat <<EOF
+static_host_map:
+  "$LH_IP": ["127.0.0.1:$LH_PORT"]
+lighthouse:
+  hosts:
+    - $LH_IP
+listen:
+  host: 0.0.0.0
+  port: 0
+EOF
+	firewall
+}
+
+# dev_config writes the config for the service under test twice: with the
+# PKI inlined as the service requires (config.yml, for lab.sh import), and
+# with the PKI as paths relative to the config (config.paths.yml, for the
+# GUI's import, which inlines them).
 dev_config() {
 	mkdir -p "$DEV"
 	chmod 700 "$DEV"
@@ -138,19 +156,64 @@ dev_config() {
 		indent_file "$PKI/dev.crt"
 		echo "  key: |"
 		indent_file "$PKI/dev.key"
-		cat <<EOF
-static_host_map:
-  "$LH_IP": ["127.0.0.1:$LH_PORT"]
-lighthouse:
-  hosts:
-    - $LH_IP
-listen:
-  host: 0.0.0.0
-  port: 0
-EOF
-		firewall
+		dev_rest
 	} >"$DEV/config.yml"
-	chmod 600 "$DEV/config.yml"
+	paths_config ../pki/ca.crt ../pki/dev.crt ../pki/dev.key >"$DEV/config.paths.yml"
+	chmod 600 "$DEV/config.yml" "$DEV/config.paths.yml"
+}
+
+# paths_config CA CERT KEY prints a dev config with pki paths.
+paths_config() {
+	cat <<EOF
+# nebula-gui test lab: dev host, pki as file paths
+pki:
+  ca: $1
+  cert: $2
+  key: $3
+EOF
+	dev_rest
+}
+
+# broken writes configs the GUI import should refuse, each with its own
+# message, into $DEV/broken/. Paths are relative to that directory.
+broken() {
+	[[ -f $PKI/ca.crt ]] || die "no PKI; run lab.sh up first"
+	build
+	local B="$DEV/broken"
+	rm -rf "$B"
+	mkdir -p "$B"
+	chmod 700 "$B"
+
+	# A cert that has already expired: nebula-cert can't backdate, so
+	# sign one valid for a second and wait it out.
+	"$BIN/nebula-cert" sign -name dev -networks "$(ip_of dev)/24" -groups users -duration 1s \
+		-ca-crt "$PKI/ca.crt" -ca-key "$PKI/ca.key" \
+		-out-crt "$B/expired.crt" -out-key "$B/expired.key"
+	paths_config ../../pki/ca.crt expired.crt expired.key >"$B/expired.yml"
+
+	# dev's cert with alice's key.
+	paths_config ../../pki/ca.crt ../../pki/dev.crt ../../pki/alice.key >"$B/key-mismatch.yml"
+
+	# A key path from the admin's machine.
+	paths_config ../../pki/ca.crt ../../pki/dev.crt /etc/nebula/laptop.key >"$B/missing-key.yml"
+
+	# The sshd debug console turned on.
+	{
+		paths_config ../../pki/ca.crt ../../pki/dev.crt ../../pki/dev.key
+		cat <<'EOF'
+sshd:
+  enabled: true
+  listen: 127.0.0.1:2222
+EOF
+	} >"$B/sshd.yml"
+
+	# Not a config at all.
+	echo "Remember to water the plants." >"$B/notes.txt"
+
+	chmod 600 "$B"/*
+	sleep 2 # let expired.crt expire
+	echo "lab: wrote broken configs to $B:"
+	(cd "$B" && ls -1 ./*.yml ./*.txt)
 }
 
 pidfile() { echo "$RUN/$1.pid"; }
@@ -181,6 +244,7 @@ up() {
 	cat <<EOF
 
 Dev config (inline PKI): $DEV/config.yml
+Dev config (PKI paths):  $DEV/config.paths.yml   (for the GUI's Import config…)
 Import it:  testlab/lab.sh import \$XDG_RUNTIME_DIR/nebula-guid.sock
 Node logs:  $RUN/<node>.log
 EOF
@@ -237,9 +301,10 @@ case "${1:-}" in
 	down) down ;;
 	status) status ;;
 	import) import "${2:-}" ;;
+	broken) broken ;;
 	clean) clean ;;
 	*)
-		echo "usage: lab.sh up | down | status | import SOCKET | clean" >&2
+		echo "usage: lab.sh up | down | status | import SOCKET | broken | clean" >&2
 		exit 2
 		;;
 esac
