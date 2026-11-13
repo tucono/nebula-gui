@@ -49,6 +49,9 @@ type CertInfo struct {
 	Networks    []netip.Prefix
 	NotAfter    time.Time
 	Fingerprint string
+	// CANotAfter is when the CA that signed the cert expires. It is zero
+	// if that CA isn't in pki.ca.
+	CANotAfter time.Time
 }
 
 // Info is what the service needs to know about a config without running it.
@@ -61,6 +64,10 @@ type Info struct {
 // own config test, which builds everything except the tun device and UDP
 // sockets. It returns the host cert's details.
 //
+// Failures it can classify are returned as *Error. The Info is returned
+// even then if the host cert could be parsed, so a caller can still show,
+// for example, when an expired cert ran out.
+//
 // The config test logs the whole config, private key included, at info
 // level, so Nebula's output is discarded here.
 func Check(raw string) (*Info, error) {
@@ -69,14 +76,40 @@ func Check(raw string) (*Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := nebula.Main(c, true, "", l, nil); err != nil {
-		return nil, err
+	info := describe(c)
+	if err := checkConfig(c, time.Now()); err != nil {
+		return info, err
 	}
+	if _, err := nebula.Main(c, true, "", l, nil); err != nil {
+		return info, classify(err)
+	}
+	if info == nil {
+		// Nebula accepted a cert we couldn't parse; say why.
+		if _, err := ParseCert(c.GetString("pki.cert", "")); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("parse pki.cert: unknown error")
+	}
+	return info, nil
+}
+
+// describe returns the config's display data, or nil if the host cert
+// can't be parsed.
+func describe(c *config.C) *Info {
 	ci, err := ParseCert(c.GetString("pki.cert", ""))
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	return &Info{Cert: *ci, ListenPort: c.GetInt("listen.port", 0)}, nil
+	if host, _, err := cert.UnmarshalCertificateFromPEM([]byte(c.GetString("pki.cert", ""))); err == nil {
+		if signer := findSigner(parseCAs(c.GetString("pki.ca", "")), host); signer != nil {
+			ci.CANotAfter = signer.NotAfter()
+		}
+	}
+	return &Info{Cert: *ci, ListenPort: c.GetInt("listen.port", 0)}
+}
+
+func checkConfig(c *config.C, now time.Time) error {
+	return checkPKI(c.GetString("pki.ca", ""), c.GetString("pki.cert", ""), c.GetString("pki.key", ""), now)
 }
 
 // ParseCert parses the first certificate in a PEM string.
@@ -122,18 +155,25 @@ type Instance struct {
 
 // Start runs Nebula with raw, a full config with inline PKI. It creates the
 // tun device and UDP listeners, so it needs privileges. Nebula logs to l.
+//
+// The PKI checks from Check run again first, so a cert that has expired
+// since it was imported is reported as such. Failures it can classify are
+// returned as *Error.
 func Start(raw, buildVersion string, l *slog.Logger) (*Instance, error) {
 	c, err := load(raw, l)
 	if err != nil {
 		return nil, err
 	}
+	if err := checkConfig(c, time.Now()); err != nil {
+		return nil, err
+	}
 	ctrl, err := nebula.Main(c, false, buildVersion, l, nil)
 	if err != nil {
-		return nil, err
+		return nil, classify(err)
 	}
 	if err := ctrl.Start(); err != nil {
 		ctrl.Stop()
-		return nil, fmt.Errorf("start nebula: %w", err)
+		return nil, classify(fmt.Errorf("start nebula: %w", err))
 	}
 	inst := &Instance{ctrl: ctrl, log: l, done: make(chan struct{})}
 	go func() {

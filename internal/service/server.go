@@ -217,7 +217,7 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 	var se *errStart
 	switch {
 	case errors.As(err, &ic):
-		s.writeError(w, api.CodeInvalidConfig, ic.msg)
+		s.writeReasonError(w, api.CodeInvalidConfig, ic.reason, ic.msg)
 	case errors.Is(err, errNotConfigured):
 		s.writeError(w, api.CodeNotConfigured, err.Error())
 	case errors.Is(err, errAlreadyRunning):
@@ -225,7 +225,7 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, errNotRunning):
 		s.writeError(w, api.CodeNotRunning, err.Error())
 	case errors.As(err, &se):
-		s.writeError(w, api.CodeInternal, se.Error())
+		s.writeReasonError(w, api.CodeInternal, se.reason, se.Error())
 	default:
 		s.log.Error("request failed", "err", err)
 		s.writeError(w, api.CodeInternal, "internal error, see the service log")
@@ -233,7 +233,11 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) writeError(w http.ResponseWriter, code api.ErrorCode, msg string) {
-	s.writeJSON(w, httpStatus(code), api.ErrorBody{Error: &api.Error{Code: code, Message: msg}})
+	s.writeReasonError(w, code, "", msg)
+}
+
+func (s *Server) writeReasonError(w http.ResponseWriter, code api.ErrorCode, reason api.Reason, msg string) {
+	s.writeJSON(w, httpStatus(code), api.ErrorBody{Error: &api.Error{Code: code, Reason: reason, Message: msg}})
 }
 
 func httpStatus(code api.ErrorCode) int {

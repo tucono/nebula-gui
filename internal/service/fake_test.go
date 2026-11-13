@@ -14,6 +14,12 @@ import (
 
 const fakeNebulaVersion = "9.9.9-fake"
 
+// Expiry dates of the fake engine's cert and CA (2030 and 2031).
+var (
+	fakeCertNotAfter = time.Unix(1893456000, 0).UTC()
+	fakeCANotAfter   = time.Unix(1924992000, 0).UTC()
+)
+
 // fakeEngine is an Engine that runs nothing.
 type fakeEngine struct {
 	mu       sync.Mutex
@@ -28,18 +34,19 @@ func (e *fakeEngine) Version() string { return fakeNebulaVersion }
 func (e *fakeEngine) Check(yaml string) (*ConfigInfo, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.checkErr != nil {
-		return nil, e.checkErr
-	}
 	name := "dev"
 	if strings.Contains(yaml, "# alice") {
 		name = "alice"
 	}
+	// Like the real engine, the description comes back with an error too.
 	return &ConfigInfo{
-		Cert:       api.CertInfo{Name: name, Groups: []string{"users"}, NotAfter: time.Unix(1893456000, 0).UTC(), Fingerprint: "abc123"},
+		Cert: api.CertInfo{
+			Name: name, Groups: []string{"users"}, Fingerprint: "abc123",
+			NotAfter: fakeCertNotAfter, CANotAfter: &fakeCANotAfter,
+		},
 		OverlayIPs: []string{"192.168.100.20/24"},
 		ListenPort: 4242,
-	}, nil
+	}, e.checkErr
 }
 
 func (e *fakeEngine) Start(string) (Instance, error) {
@@ -51,6 +58,12 @@ func (e *fakeEngine) Start(string) (Instance, error) {
 	e.starts++
 	e.last = &fakeInstance{done: make(chan struct{})}
 	return e.last, nil
+}
+
+func (e *fakeEngine) setStartErr(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.startErr = err
 }
 
 func (e *fakeEngine) instance() *fakeInstance {

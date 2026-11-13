@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/tucono/nebula-gui/internal/api"
 )
 
 // redacted replaces secrets in GET /v1/config.
@@ -17,12 +19,17 @@ const redacted = "<redacted>"
 
 // errInvalidConfig marks config validation failures. Its message is safe to
 // return to the client: it never includes config values.
-type errInvalidConfig struct{ msg string }
+type errInvalidConfig struct {
+	msg    string
+	reason api.Reason // optional
+	err    error      // the underlying error, if any
+}
 
 func (e *errInvalidConfig) Error() string { return e.msg }
+func (e *errInvalidConfig) Unwrap() error { return e.err }
 
-func invalidf(format string, args ...any) error {
-	return &errInvalidConfig{msg: fmt.Sprintf(format, args...)}
+func invalidf(reason api.Reason, format string, args ...any) error {
+	return &errInvalidConfig{msg: fmt.Sprintf(format, args...), reason: reason}
 }
 
 // validateConfig checks the rules the service enforces before Nebula sees a
@@ -35,33 +42,33 @@ func invalidf(format string, args ...any) error {
 func validateConfig(raw string) error {
 	var root map[string]any
 	if err := yaml.Unmarshal([]byte(raw), &root); err != nil {
-		return invalidf("config is not valid YAML: %s", yamlErrMsg(err))
+		return invalidf(api.ReasonYAMLSyntax, "config is not valid YAML: %s", yamlErrMsg(err))
 	}
 	if root == nil {
-		return invalidf("config is empty")
+		return invalidf("", "config is empty")
 	}
 
 	pki, ok := root["pki"].(map[string]any)
 	if !ok {
-		return invalidf("pki section is missing")
+		return invalidf(api.ReasonPKIMissing, "pki section is missing")
 	}
 	for _, k := range []string{"ca", "cert", "key"} {
 		v, ok := pki[k]
 		if !ok {
-			return invalidf("pki.%s is missing", k)
+			return invalidf(api.ReasonPKIMissing, "pki.%s is missing", k)
 		}
 		s, ok := v.(string)
 		if !ok {
-			return invalidf("pki.%s must be a PEM string", k)
+			return invalidf("", "pki.%s must be a PEM string", k)
 		}
 		if !strings.HasPrefix(strings.TrimSpace(s), "-----BEGIN ") {
-			return invalidf("pki.%s must be inline PEM, not a file path", k)
+			return invalidf("", "pki.%s must be inline PEM, not a file path", k)
 		}
 	}
 
 	if sshd, ok := root["sshd"].(map[string]any); ok {
 		if v, set := sshd["enabled"]; set && v != false {
-			return invalidf("sshd.enabled must be false: the debug console is not allowed")
+			return invalidf(api.ReasonSSHDEnabled, "sshd.enabled must be false: the debug console is not allowed")
 		}
 	}
 	return nil

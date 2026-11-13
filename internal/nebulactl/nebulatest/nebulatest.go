@@ -23,27 +23,44 @@ type PKI struct {
 	CA, Cert, Key string
 }
 
-// NewPKI returns a CA and a host cert for name at addr (for example
-// 192.168.100.20/24), valid for a day.
-func NewPKI(name, addr string, groups ...string) (PKI, error) {
-	now := time.Now().Truncate(time.Second)
-	caPub, caPriv, err := ed25519.GenerateKey(rand.Reader)
+// CA is a test certificate authority.
+type CA struct {
+	crt  cert.Certificate
+	priv ed25519.PrivateKey
+	// PEM is the CA cert.
+	PEM string
+}
+
+// NewCA returns a CA valid from notBefore to notAfter. Either may be in the
+// past, to build expired fixtures.
+func NewCA(notBefore, notAfter time.Time) (*CA, error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return PKI{}, err
+		return nil, err
 	}
-	ca, err := (&cert.TBSCertificate{
+	crt, err := (&cert.TBSCertificate{
 		Version:   cert.Version2,
 		Curve:     cert.Curve_CURVE25519,
 		Name:      "nebula-gui test CA",
-		NotBefore: now.Add(-time.Minute),
-		NotAfter:  now.Add(48 * time.Hour),
-		PublicKey: caPub,
+		NotBefore: notBefore.Truncate(time.Second),
+		NotAfter:  notAfter.Truncate(time.Second),
+		PublicKey: pub,
 		IsCA:      true,
-	}).Sign(nil, cert.Curve_CURVE25519, caPriv)
+	}).Sign(nil, cert.Curve_CURVE25519, priv)
 	if err != nil {
-		return PKI{}, fmt.Errorf("sign CA: %w", err)
+		return nil, fmt.Errorf("sign CA: %w", err)
 	}
+	p, err := crt.MarshalPEM()
+	if err != nil {
+		return nil, err
+	}
+	return &CA{crt: crt, priv: priv, PEM: string(p)}, nil
+}
 
+// Host signs a host cert for name at addr (for example 192.168.100.20/24),
+// valid from notBefore to notAfter, which must lie within the CA's own
+// validity. The returned PKI's CA is this CA alone.
+func (ca *CA) Host(name, addr string, notBefore, notAfter time.Time, groups ...string) (PKI, error) {
 	prefix, err := netip.ParsePrefix(addr)
 	if err != nil {
 		return PKI{}, err
@@ -62,32 +79,65 @@ func NewPKI(name, addr string, groups ...string) (PKI, error) {
 		Name:      name,
 		Networks:  []netip.Prefix{prefix},
 		Groups:    groups,
-		NotBefore: now.Add(-time.Minute),
-		NotAfter:  now.Add(24 * time.Hour),
+		NotBefore: notBefore.Truncate(time.Second),
+		NotAfter:  notAfter.Truncate(time.Second),
 		PublicKey: pub,
-	}).Sign(ca, cert.Curve_CURVE25519, caPriv)
+	}).Sign(ca.crt, cert.Curve_CURVE25519, ca.priv)
 	if err != nil {
 		return PKI{}, fmt.Errorf("sign host cert: %w", err)
-	}
-
-	caPEM, err := ca.MarshalPEM()
-	if err != nil {
-		return PKI{}, err
 	}
 	hostPEM, err := host.MarshalPEM()
 	if err != nil {
 		return PKI{}, err
 	}
 	return PKI{
-		CA:   string(caPEM),
+		CA:   ca.PEM,
 		Cert: string(hostPEM),
 		Key:  string(cert.MarshalPrivateKeyToPEM(cert.Curve_CURVE25519, priv)),
 	}, nil
 }
 
+// NewPKI returns a CA and a host cert for name at addr (for example
+// 192.168.100.20/24), valid for a day.
+func NewPKI(name, addr string, groups ...string) (PKI, error) {
+	now := time.Now()
+	ca, err := NewCA(now.Add(-time.Minute), now.Add(48*time.Hour))
+	if err != nil {
+		return PKI{}, err
+	}
+	return ca.Host(name, addr, now.Add(-time.Minute), now.Add(24*time.Hour), groups...)
+}
+
+// EncryptedKey returns a passphrase-protected key in PEM. Nebula only
+// encrypts signing (CA) keys, so this is what a user gets when they're
+// handed an encrypted key file.
+func EncryptedKey() (string, error) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", err
+	}
+	// Small Argon2 parameters: the strength doesn't matter here.
+	b, err := cert.EncryptAndMarshalSigningPrivateKey(cert.Curve_CURVE25519, priv, []byte("test"), cert.NewArgon2Parameters(64, 1, 1))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// ConfigOptions changes the defaults of Config.
+type ConfigOptions struct {
+	// ListenPort is the UDP port. 0 picks a random one.
+	ListenPort int
+	// Tun enables the tun device, which needs privileges.
+	Tun bool
+}
+
 // Config returns a minimal config for p with the tun device disabled and a
 // random listen port, so Nebula can start without privileges.
-func (p PKI) Config() string {
+func (p PKI) Config() string { return p.ConfigWith(ConfigOptions{}) }
+
+// ConfigWith returns a minimal config for p with the given options.
+func (p PKI) ConfigWith(o ConfigOptions) string {
 	return fmt.Sprintf(`pki:
   ca: |
 %s  cert: |
@@ -95,9 +145,9 @@ func (p PKI) Config() string {
 %s
 listen:
   host: 127.0.0.1
-  port: 0
+  port: %d
 tun:
-  disabled: true
+  disabled: %t
 lighthouse:
   am_lighthouse: false
 firewall:
@@ -108,7 +158,7 @@ firewall:
   inbound:
     - proto: icmp
       host: any
-`, indent(p.CA), indent(p.Cert), indent(p.Key))
+`, indent(p.CA), indent(p.Cert), indent(p.Key), o.ListenPort, !o.Tun)
 }
 
 func indent(s string) string {

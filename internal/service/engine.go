@@ -5,6 +5,7 @@ package service
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/tucono/nebula-gui/internal/api"
 	"github.com/tucono/nebula-gui/internal/nebulactl"
@@ -15,9 +16,13 @@ import (
 type Engine interface {
 	// Version is the embedded Nebula version.
 	Version() string
-	// Check dry-runs a config (inline PKI only) and describes it.
+	// Check dry-runs a config (inline PKI only) and describes it. On
+	// failure it still returns the description when the host cert could be
+	// parsed, so an expired cert can be shown. Errors it can classify carry
+	// a *nebulactl.Error.
 	Check(yaml string) (*ConfigInfo, error)
-	// Start runs Nebula with a config that passed Check.
+	// Start runs Nebula with a config that passed Check. Errors it can
+	// classify carry a *nebulactl.Error.
 	Start(yaml string) (Instance, error)
 }
 
@@ -52,8 +57,12 @@ func (NebulaEngine) Version() string { return nebulactl.Version() }
 // Check implements Engine.
 func (NebulaEngine) Check(yaml string) (*ConfigInfo, error) {
 	info, err := nebulactl.Check(yaml)
-	if err != nil {
+	if info == nil {
 		return nil, err
+	}
+	var caNotAfter *time.Time
+	if t := info.Cert.CANotAfter; !t.IsZero() {
+		caNotAfter = &t
 	}
 	ips := make([]string, 0, len(info.Cert.Networks))
 	for _, n := range info.Cert.Networks {
@@ -65,10 +74,11 @@ func (NebulaEngine) Check(yaml string) (*ConfigInfo, error) {
 			Groups:      info.Cert.Groups,
 			NotAfter:    info.Cert.NotAfter,
 			Fingerprint: info.Cert.Fingerprint,
+			CANotAfter:  caNotAfter,
 		},
 		OverlayIPs: ips,
 		ListenPort: info.ListenPort,
-	}, nil
+	}, err
 }
 
 // Start implements Engine.
