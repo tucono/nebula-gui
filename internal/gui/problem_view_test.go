@@ -133,3 +133,51 @@ func TestProblemDialog(t *testing.T) {
 		t.Fatal("dialog still open after the fix")
 	}
 }
+
+func TestProblemViewDismissAndSupports(t *testing.T) {
+	test.NewTempApp(t)
+	var dismissed *problem
+	v := newProblemView(problemHandlers{
+		OnFix:     func(fixAction) {},
+		Supports:  func(k fixKind) bool { return k == fixConnect },
+		OnDismiss: func(p *problem) { dismissed = p },
+	})
+
+	p := nebulaStopped()
+	p.Dismiss = true
+	v.Set(p)
+	if button(t, v.Object(), "Connect again") == nil {
+		t.Fatal("supported fix hidden")
+	}
+	test.Tap(button(t, v.Object(), "Dismiss"))
+	if dismissed != p {
+		t.Fatal("Dismiss didn't call OnDismiss")
+	}
+
+	v.Set(noConfig())
+	if button(t, v.Object(), "Import config…") != nil {
+		t.Fatal("unsupported fix shown")
+	}
+	if button(t, v.Object(), "Dismiss") != nil {
+		t.Fatal("Dismiss shown for a problem without Dismiss")
+	}
+}
+
+func TestProblemViewSetSame(t *testing.T) {
+	test.NewTempApp(t)
+	v := newProblemView(problemHandlers{})
+	v.Set(serviceNotRunning())
+	before := v.box.Objects[0]
+	// The poller sets an equal problem every few seconds; rebuilding
+	// would close the Details section the user opened.
+	v.Set(serviceNotRunning())
+	if v.box.Objects[0] != before {
+		t.Fatal("rebuilt for an equal problem")
+	}
+	p := serviceNotRunning()
+	p.Details = "different"
+	v.Set(p)
+	if v.box.Objects[0] == before {
+		t.Fatal("not rebuilt for new details")
+	}
+}

@@ -29,6 +29,9 @@ type problem struct {
 	// place a technical term may appear outside Details.
 	Command string
 	Fix     *fixAction
+	// Dismiss shows a Dismiss button next to the fix. It is set for
+	// problems the user can clear, such as a failed connect.
+	Dismiss bool
 	// Details is collapsed by default: the error code, reason and raw
 	// message. The view adds the app and service versions.
 	Details string
@@ -498,6 +501,7 @@ func statusProblem(st *api.StatusResponse, goos string) *problem {
 	e := &api.Error{Code: api.CodeInternal, Reason: st.ErrorReason, Message: st.Error}
 	p := fromAPIError(e, problemContext{Op: opConnect, Cert: st.Cert, GOOS: goos})
 	p.Details = joinDetails(p.Details, errorDetails(e))
+	p.Dismiss = true // Dismiss calls Disconnect, which clears the error state
 	return p
 }
 

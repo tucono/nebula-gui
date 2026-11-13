@@ -72,6 +72,22 @@ curl -s --unix-socket $S -X POST http://x/v1/disconnect
 
 Without `CAP_NET_ADMIN`, connect fails with `internal` ("Failed to get a tun/tap device"), and `/v1/status` shows state `error`.
 
+### Operator check after GUI commits
+Unit and Fyne tests can't show how the window behaves on a real desktop: layout, resizing, focus, the clipboard, and the compositor. So every commit that changes the GUI (`internal/gui`, `cmd/nebula-gui`) is followed by a short check that a person runs by hand:
+
+1. The author of the commit writes a check plan: numbered steps covering what the commit changed, each with a command to run where one is needed and the expected result.
+2. Every plan also includes the baseline below.
+3. The operator runs the plan and reports pass or fail for each step, with a screenshot for anything that looks wrong.
+4. Failures are fixed in a follow-up commit, and that commit gets its own check.
+
+**Baseline**, for every GUI commit:
+- The window opens at its normal size, with nothing cut off or overlapping.
+- Resize the window smaller and larger. The content reflows or scrolls, and never slides under the title bar.
+- Every button reacts where the pointer is.
+- Closing the window quits the app.
+
+Note which desktop and session the check ran on (for example COSMIC on Wayland), because compositors differ.
+
 ### GUI smoke test (M2/M3)
 1. Import `testlab/dev/config.yml` in the GUI and connect.
 2. The status shows `running` and overlay IP `192.168.100.20`.

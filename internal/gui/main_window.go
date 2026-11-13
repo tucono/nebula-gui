@@ -1,0 +1,326 @@
+// @authorship: AI-Assisted
+// @architect: AI (Claude Opus 5.5)
+
+package gui
+
+import (
+	"context"
+	"fmt"
+	"runtime"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
+
+	"github.com/tucono/nebula-gui/internal/api"
+)
+
+// actionClient is the part of api.Client the window's buttons use.
+type actionClient interface {
+	serviceClient
+	Connect(ctx context.Context) (*api.StatusResponse, error)
+	Disconnect(ctx context.Context) (*api.StatusResponse, error)
+	Addr() string
+}
+
+// mainWindow is the app's window: a problem banner or the status header,
+// then the versions in small print. Its fields are only touched on the UI
+// goroutine; the poller and the actions hand results over with fyne.Do.
+type mainWindow struct {
+	a          fyne.App
+	w          fyne.Window
+	c          actionClient
+	log        *appLog
+	gate       *statusGate
+	poller     *poller
+	appVersion string
+	// spawn runs an action's call off the UI goroutine. Tests replace it
+	// to run the call in place.
+	spawn func(func())
+
+	in         statusInput
+	version    *api.VersionResponse
+	lastBanner problemID
+
+	banner   *problemView
+	waiting  *widget.Label
+	header   *fyne.Container
+	headline *widget.Label
+	spinner  *widget.Activity
+	address  *widget.Label
+	cert     *widget.Label
+	valid    *widget.Label
+	uptime   *widget.Label
+	button   *widget.Button
+	footer   *widget.RichText
+}
+
+func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *mainWindow {
+	m := &mainWindow{
+		a:          a,
+		w:          a.NewWindow("Nebula"),
+		c:          c,
+		log:        log,
+		gate:       &statusGate{},
+		appVersion: appVersion,
+		spawn:      func(f func()) { go f() },
+		in:         statusInput{GOOS: runtime.GOOS},
+	}
+	m.poller = newPoller(c, log, m.gate)
+
+	m.banner = newProblemView(problemHandlers{
+		OnFix:     m.fix,
+		Supports:  supportedFix,
+		OnDismiss: m.dismiss,
+		Versions:  m.versionsLine,
+	})
+	m.waiting = widget.NewLabel("Contacting the background service…")
+	m.waiting.Wrapping = fyne.TextWrapWord
+
+	m.headline = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	m.headline.SizeName = theme.SizeNameSubHeadingText
+	m.spinner = widget.NewActivity()
+	m.spinner.Hide()
+	m.address = widget.NewLabel("")
+	m.cert = widget.NewLabel("")
+	m.valid = widget.NewLabel("")
+	m.uptime = widget.NewLabel("")
+	m.button = widget.NewButton("Connect", func() {
+		m.act(describeStatus(m.now()).ButtonAction)
+	})
+	m.button.Importance = widget.HighImportance
+	m.header = container.NewVBox(
+		container.NewHBox(m.headline, m.spinner),
+		widget.NewForm(
+			widget.NewFormItem("Address", m.address),
+			widget.NewFormItem("Certificate", m.cert),
+			widget.NewFormItem("Valid until", m.valid),
+			widget.NewFormItem("Connected for", m.uptime),
+		),
+		container.NewHBox(m.button),
+	)
+	m.header.Hide()
+
+	m.footer = widget.NewRichText()
+	m.footer.Wrapping = fyne.TextWrapWord
+
+	// The scroll keeps the content from growing the window. Fyne enlarges
+	// a window whose content no longer fits, and some Wayland compositors
+	// (seen on COSMIC) ignore that, which leaves the layout taller than the
+	// window and the mouse out of step with it.
+	m.w.SetContent(container.NewVScroll(container.NewPadded(container.NewVBox(
+		m.banner.Object(),
+		m.waiting,
+		m.header,
+		widget.NewSeparator(),
+		m.footer,
+	))))
+	m.w.Resize(fyne.NewSize(520, 420))
+	m.render()
+	return m
+}
+
+// now returns the input with the current time, for describeStatus.
+func (m *mainWindow) now() statusInput {
+	in := m.in
+	in.Now = time.Now()
+	return in
+}
+
+// start polls until ctx ends.
+func (m *mainWindow) start(ctx context.Context) {
+	go m.poller.run(ctx, func(r pollResult) {
+		fyne.Do(func() { m.applyPoll(r) })
+	})
+}
+
+func (m *mainWindow) applyPoll(r pollResult) {
+	if r.Version != nil {
+		m.version = r.Version
+		m.in.Version = versionProblem(r.Version)
+	}
+	if m.gate.Accept(r.Seq) {
+		switch {
+		case r.Err != nil:
+			m.in.Err, m.in.Status = r.Err, nil
+		case r.Status != nil:
+			m.applyStatus(r.Status)
+		default: // another API version: no status to show
+			m.in.Err, m.in.Status = nil, nil
+		}
+	}
+	m.render()
+}
+
+func (m *mainWindow) applyStatus(st *api.StatusResponse) {
+	m.in.Err, m.in.Status = nil, st
+	if st.State == api.StateRunning || st.State == api.StateStarting {
+		m.in.Action = nil // the problem it showed is over
+	}
+}
+
+// render updates the widgets from m.in.
+func (m *mainWindow) render() {
+	v := describeStatus(m.now())
+
+	m.banner.Set(v.Banner)
+	var id problemID
+	if v.Banner != nil {
+		id = v.Banner.ID
+	}
+	if id != m.lastBanner {
+		if id != "" {
+			m.log.Add("problem shown", "problem", string(id), "details", v.Banner.Details)
+		}
+		m.lastBanner = id
+	}
+
+	m.waiting.Hidden = !v.Waiting
+	m.waiting.Refresh()
+
+	m.header.Hidden = !v.ShowHeader
+	if v.ShowHeader {
+		m.headline.SetText(v.Headline)
+		if v.Busy {
+			m.spinner.Show()
+			m.spinner.Start()
+		} else {
+			m.spinner.Stop()
+			m.spinner.Hide()
+		}
+		m.address.SetText(v.Address)
+		m.cert.SetText(v.Cert)
+		m.valid.SetText(v.ValidUntil)
+		m.uptime.SetText(v.Uptime)
+		m.button.SetText(v.Button)
+		if v.ButtonEnabled {
+			m.button.Enable()
+		} else {
+			m.button.Disable()
+		}
+	}
+	m.header.Refresh()
+
+	m.footer.Segments = []widget.RichTextSegment{&widget.TextSegment{
+		Text: m.footerText(),
+		Style: widget.RichTextStyle{
+			SizeName:  theme.SizeNameCaptionText,
+			ColorName: theme.ColorNamePlaceHolder,
+			Inline:    true,
+		},
+	}}
+	m.footer.Refresh()
+}
+
+func (m *mainWindow) footerText() string {
+	s := "App " + m.appVersion
+	if m.version != nil {
+		vv := describeVersion(m.version, nil)
+		s += fmt.Sprintf(" · Service %s · Nebula %s · API %s", vv.ServiceVer, vv.NebulaVer, vv.APIVer)
+	}
+	return s
+}
+
+// versionsLine goes under Details in every problem.
+func (m *mainWindow) versionsLine() string {
+	svc := "—"
+	if m.version != nil {
+		svc = orDash(m.version.ServiceVersion)
+	}
+	return fmt.Sprintf("app %s, service %s, service address %s", m.appVersion, svc, m.c.Addr())
+}
+
+// supportedFix lists the fixes the window can do so far. The import fixes
+// come with the import dialog (M2 step 7).
+func supportedFix(k fixKind) bool {
+	switch k {
+	case fixRetry, fixOpenDownloads, fixConnect, fixReconnect:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *mainWindow) fix(f fixAction) {
+	switch f.Kind {
+	case fixRetry:
+		m.poller.Poke()
+	case fixOpenDownloads:
+		openDownloads(m.a)
+	case fixConnect:
+		m.act(actConnect)
+	case fixReconnect:
+		m.act(actReconnect)
+	}
+}
+
+// dismiss clears a problem from a failed action, and the service's error
+// state with Disconnect.
+func (m *mainWindow) dismiss(*problem) {
+	m.in.Action = nil
+	m.log.Add("problem dismissed")
+	if m.in.Status != nil && m.in.Status.State == api.StateError {
+		m.act(actDisconnect)
+		return
+	}
+	m.render()
+}
+
+// act runs a Connect or Disconnect off the UI goroutine. The button stays
+// disabled until it returns; polling goes on meanwhile, so the header can
+// show "Disconnecting…".
+func (m *mainWindow) act(a action) {
+	if a == actNone || m.in.Acting != actNone {
+		return
+	}
+	m.in.Acting, m.in.Action = a, nil
+	m.log.Add(a.String() + " clicked")
+	m.render()
+	var cert *api.CertInfo
+	if m.in.Status != nil {
+		cert = m.in.Status.Cert
+	}
+
+	m.spawn(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), actionTimeout)
+		defer cancel()
+		st, err := runAction(ctx, m.c, a)
+		seq := m.gate.Begin() // the response shows the state after the action
+		fyne.Do(func() {
+			m.in.Acting = actNone
+			if err != nil {
+				p := problemFor(err, problemContext{Op: opConnect, Cert: cert, GOOS: m.in.GOOS})
+				p.Dismiss = true
+				m.in.Action = p
+				m.log.Add(a.String()+" failed", "problem", string(p.ID), "error", errorDetails(err))
+				m.poller.Poke() // the status may have changed too
+			} else {
+				m.log.Add(a.String()+" done", "state", string(st.State))
+				if m.gate.Accept(seq) {
+					m.applyStatus(st)
+				}
+			}
+			m.render()
+		})
+	})
+}
+
+// runAction calls the service for a. Reconnect disconnects first; if
+// Nebula had already stopped, that isn't an error.
+func runAction(ctx context.Context, c actionClient, a action) (*api.StatusResponse, error) {
+	switch a {
+	case actConnect:
+		return c.Connect(ctx)
+	case actDisconnect:
+		return c.Disconnect(ctx)
+	case actReconnect:
+		if _, err := c.Disconnect(ctx); err != nil && api.ErrorCodeOf(err) != api.CodeNotRunning {
+			return nil, err
+		}
+		return c.Connect(ctx)
+	default:
+		return nil, fmt.Errorf("unknown action %d", a)
+	}
+}

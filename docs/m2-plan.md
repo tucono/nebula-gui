@@ -347,7 +347,7 @@ The service already knows *why* something failed; it should say so in a form the
 
 **New file:** `internal/gui/main_window.go`, which replaces most of `Run`.
 
-- **Layout:** a status header (or a problem banner) at the top, then an `AppTabs` with **Status** and **Logs** (M3 adds a **Peers** tab), a footer with the versions (the current version form, made smaller), and a Help menu with **Get help…**.
+- **Layout:** a status header (or a problem banner) at the top, then an `AppTabs` with **Status** and **Logs** (M3 adds a **Peers** tab), a footer with the versions (the current version form, made smaller), and a Help menu with **Get help…**. The tabs arrive with the Logs tab (step 8) and the Help menu with **Get help…** (step 9), so neither shows up empty before then.
 - **Connect and Disconnect** run off the UI goroutine, and the button stays disabled until they return. The response is already a `StatusResponse`, so it updates the view right away without waiting for the next poll.
 - **Timeouts:** 5 s for reads (`Version`, `Status`, `Logs`, `Diagnostics`, `Config`) and 30 s for actions (`Connect`, `Disconnect`, `PutConfig`, `DeleteConfig`). `Disconnect` can take more than 10 s while Nebula's packet readers exit (`nebulactl.stopTimeout`), and a slow but successful action must not show "isn't responding". Status polling keeps running during an action, so the header can show "Disconnecting…".
 - **Connect failures** become a problem banner using the reason from step 1, for example "Couldn't create the network adapter", with the raw `internal: Failed to get a tun/tap device` under Details.

@@ -9,20 +9,16 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"time"
+	"os"
+	"runtime"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/widget"
 
 	"github.com/tucono/nebula-gui/internal/api"
 )
 
-const (
-	appID          = "io.github.tucono.nebulagui"
-	requestTimeout = 5 * time.Second
-)
+const appID = "io.github.tucono.nebulagui"
 
 // Options configures the GUI.
 type Options struct {
@@ -32,76 +28,24 @@ type Options struct {
 
 // Run opens the main window and blocks until the app quits.
 func Run(opts Options) {
-	a := app.NewWithID(appID)
-	w := a.NewWindow("Nebula")
-
-	message := widget.NewLabel("Contacting the background service…")
-	message.Wrapping = fyne.TextWrapWord
-	serviceVer := widget.NewLabel("")
-	nebulaVer := widget.NewLabel("")
-	apiVer := widget.NewLabel("")
-	versions := widget.NewForm(
-		widget.NewFormItem("App", widget.NewLabel(opts.AppVersion)),
-		widget.NewFormItem("Service", serviceVer),
-		widget.NewFormItem("Nebula", nebulaVer),
-		widget.NewFormItem("API", apiVer),
-	)
-	versions.Hide()
-
-	var refresh func()
-	banner := newProblemView(problemHandlers{
-		OnFix: func(f fixAction) {
-			switch f.Kind {
-			case fixRetry:
-				refresh()
-			case fixOpenDownloads:
-				openDownloads(a)
-			}
-		},
-		Versions: func() string {
-			return fmt.Sprintf("app %s, service %s, service address %s",
-				opts.AppVersion, orDash(serviceVer.Text), opts.Client.Addr())
-		},
-	})
-
-	refresh = func() {
-		// While a problem is shown it stays put during the retry. Showing
-		// the message on top of it would make the content taller than the
-		// window for a moment.
-		if banner.Problem() == nil {
-			message.SetText("Contacting the background service…")
-			message.Show()
+	log := newAppLog()
+	if dir, err := defaultAppLogDir(); err == nil {
+		if l, err := openAppLog(dir); err != nil {
+			fmt.Fprintf(os.Stderr, "nebula-gui: GUI log kept in memory only: %v\n", err)
+		} else {
+			log = l
 		}
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
-			defer cancel()
-			v, err := opts.Client.Version(ctx)
-			vv := describeVersion(v, err)
-			fyne.Do(func() {
-				serviceVer.SetText(vv.ServiceVer)
-				nebulaVer.SetText(vv.NebulaVer)
-				apiVer.SetText(vv.APIVer)
-				if vv.ShowVersions {
-					versions.Show()
-				} else {
-					versions.Hide()
-				}
-				banner.Set(vv.Problem)
-				message.SetText("The background service is running.")
-				message.Hidden = vv.Problem != nil
-				message.Refresh()
-			})
-		}()
 	}
+	defer func() { _ = log.Close() }()
+	log.Add("app started", "version", opts.AppVersion, "os", runtime.GOOS+"/"+runtime.GOARCH)
 
-	// The scroll keeps the content from growing the window. Fyne enlarges
-	// a window whose content no longer fits, and some Wayland compositors
-	// (seen on COSMIC) ignore that, which leaves the layout taller than the
-	// window and the mouse out of step with it.
-	w.SetContent(container.NewVScroll(container.NewPadded(container.NewVBox(banner.Object(), message, versions))))
-	w.Resize(fyne.NewSize(480, 260))
-	refresh()
-	w.ShowAndRun()
+	a := app.NewWithID(appID)
+	m := newMainWindow(a, opts.Client, log, opts.AppVersion)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m.start(ctx)
+	m.w.ShowAndRun()
+	log.Add("app closed")
 }
 
 // openDownloads opens the public releases page in the browser.

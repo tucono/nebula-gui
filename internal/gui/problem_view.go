@@ -18,6 +18,12 @@ import (
 type problemHandlers struct {
 	// OnFix runs the fix button. Nil hides fix buttons.
 	OnFix func(fixAction)
+	// Supports reports whether OnFix can do a kind of fix; the button is
+	// hidden for the others. Nil means every kind.
+	Supports func(fixKind) bool
+	// OnDismiss runs the Dismiss button of a problem with Dismiss set.
+	// Nil hides it.
+	OnDismiss func(*problem)
 	// OnHelp opens the troubleshooting report for the problem. Nil hides
 	// Get help… until the report exists (M2 step 9).
 	OnHelp func(*problem)
@@ -48,7 +54,13 @@ func (v *problemView) Object() fyne.CanvasObject { return v.box }
 func (v *problemView) Problem() *problem { return v.cur }
 
 // Set shows p, or hides the view for nil. Call it on the UI goroutine.
+// Setting the problem already shown changes nothing, so polling doesn't
+// close the Details section the user opened.
 func (v *problemView) Set(p *problem) {
+	if sameProblem(v.cur, p) {
+		v.cur = p
+		return
+	}
 	v.cur = p
 	if p == nil {
 		v.box.Objects = nil
@@ -87,11 +99,14 @@ func problemObjects(p *problem, h problemHandlers) []fyne.CanvasObject {
 	}
 
 	var buttons []fyne.CanvasObject
-	if p.Fix != nil && h.OnFix != nil {
+	if p.Fix != nil && h.OnFix != nil && (h.Supports == nil || h.Supports(p.Fix.Kind)) {
 		fix := *p.Fix
 		b := widget.NewButton(fix.Label, func() { h.OnFix(fix) })
 		b.Importance = widget.HighImportance
 		buttons = append(buttons, b)
+	}
+	if p.Dismiss && h.OnDismiss != nil {
+		buttons = append(buttons, widget.NewButton("Dismiss", func() { h.OnDismiss(p) }))
 	}
 	if h.OnHelp != nil {
 		buttons = append(buttons, widget.NewButtonWithIcon("Get help…", theme.HelpIcon(), func() { h.OnHelp(p) }))
@@ -111,6 +126,15 @@ func problemObjects(p *problem, h problemHandlers) []fyne.CanvasObject {
 		objs = append(objs, widget.NewAccordion(widget.NewAccordionItem("Details", d)))
 	}
 	return objs
+}
+
+// sameProblem reports whether a and b would look the same.
+func sameProblem(a, b *problem) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.ID == b.ID && a.Title == b.Title && a.Explain == b.Explain &&
+		a.Details == b.Details && a.Dismiss == b.Dismiss
 }
 
 func wrapped(s string) *widget.Label {
