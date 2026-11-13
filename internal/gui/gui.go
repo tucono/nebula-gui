@@ -7,6 +7,8 @@ package gui
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -33,7 +35,7 @@ func Run(opts Options) {
 	a := app.NewWithID(appID)
 	w := a.NewWindow("Nebula")
 
-	message := widget.NewLabel("Contacting the service…")
+	message := widget.NewLabel("Contacting the background service…")
 	message.Wrapping = fyne.TextWrapWord
 	serviceVer := widget.NewLabel("")
 	nebulaVer := widget.NewLabel("")
@@ -46,17 +48,36 @@ func Run(opts Options) {
 	)
 	versions.Hide()
 
-	var retry *widget.Button
-	refresh := func() {
-		retry.Disable()
-		message.SetText("Contacting the service…")
+	var refresh func()
+	banner := newProblemView(problemHandlers{
+		OnFix: func(f fixAction) {
+			switch f.Kind {
+			case fixRetry:
+				refresh()
+			case fixOpenDownloads:
+				openDownloads(a)
+			}
+		},
+		Versions: func() string {
+			return fmt.Sprintf("app %s, service %s, service address %s",
+				opts.AppVersion, orDash(serviceVer.Text), opts.Client.Addr())
+		},
+	})
+
+	refresh = func() {
+		// While a problem is shown it stays put during the retry. Showing
+		// the message on top of it would make the content taller than the
+		// window for a moment.
+		if banner.Problem() == nil {
+			message.SetText("Contacting the background service…")
+			message.Show()
+		}
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 			defer cancel()
 			v, err := opts.Client.Version(ctx)
-			vv := describeVersion(opts.Client.Addr(), v, err)
+			vv := describeVersion(v, err)
 			fyne.Do(func() {
-				message.SetText(vv.Message)
 				serviceVer.SetText(vv.ServiceVer)
 				nebulaVer.SetText(vv.NebulaVer)
 				apiVer.SetText(vv.APIVer)
@@ -65,14 +86,29 @@ func Run(opts Options) {
 				} else {
 					versions.Hide()
 				}
-				retry.Enable()
+				banner.Set(vv.Problem)
+				message.SetText("The background service is running.")
+				message.Hidden = vv.Problem != nil
+				message.Refresh()
 			})
 		}()
 	}
-	retry = widget.NewButton("Retry", refresh)
 
-	w.SetContent(container.NewPadded(container.NewVBox(message, versions, retry)))
+	// The scroll keeps the content from growing the window. Fyne enlarges
+	// a window whose content no longer fits, and some Wayland compositors
+	// (seen on COSMIC) ignore that, which leaves the layout taller than the
+	// window and the mouse out of step with it.
+	w.SetContent(container.NewVScroll(container.NewPadded(container.NewVBox(banner.Object(), message, versions))))
 	w.Resize(fyne.NewSize(480, 260))
 	refresh()
 	w.ShowAndRun()
+}
+
+// openDownloads opens the public releases page in the browser.
+func openDownloads(a fyne.App) {
+	u, err := url.Parse(downloadURL)
+	if err != nil {
+		return
+	}
+	_ = a.OpenURL(u)
 }

@@ -20,6 +20,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/DefinedNet/dnsconfig v0.0.0-20261028201825-617c971e7a6a // indirect
 	github.com/DefinedNet/netlink v1.3.2-dn.1 // indirect
+	github.com/FyshOS/fancyfs v0.0.1 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -42,7 +43,6 @@ require (
 	github.com/hack-pad/safejs v0.1.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/miekg/dns v1.1.73 // indirect
 	github.com/miekg/pkcs11 v1.1.2 // indirect
