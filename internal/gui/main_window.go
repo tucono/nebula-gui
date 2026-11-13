@@ -64,8 +64,16 @@ type mainWindow struct {
 	removeB  *widget.Button
 	footer   *widget.RichText
 
-	// picker is the open file picker, kept the size of the window.
+	// picker is the open Fyne file picker, kept the size of the window.
 	picker *dialog.FileDialog
+	// nativeOpen shows the OS's file picker; nil uses Fyne's. Tests
+	// replace it.
+	nativeOpen nativeOpenFunc
+	// picking is set while the native picker is open, which doesn't
+	// block the window the way Fyne's modal picker does.
+	picking bool
+	// noNative is set once the native picker has failed to open.
+	noNative bool
 }
 
 func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *mainWindow {
@@ -78,6 +86,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		appVersion: appVersion,
 		spawn:      func(f func()) { go f() },
 		readFile:   readCapped,
+		nativeOpen: platformOpen,
 		in:         statusInput{GOOS: runtime.GOOS},
 	}
 	m.poller = newPoller(c, log, m.gate)

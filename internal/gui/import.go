@@ -6,14 +6,12 @@ package gui
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/storage"
 
 	"github.com/tucono/nebula-gui/internal/api"
 )
@@ -41,21 +39,10 @@ func (m *mainWindow) importConfig() {
 	if m.importing {
 		return
 	}
-	d := dialog.NewFileOpen(func(r fyne.URIReadCloser, err error) {
-		if err != nil {
-			m.log.Add("import failed", "error", err.Error())
-			dialog.ShowError(err, m.w)
-			return
-		}
-		if r == nil {
-			return // cancelled
-		}
-		raw, rerr := io.ReadAll(io.LimitReader(r, maxFileBytes+1))
-		_ = r.Close()
-		m.startImport(r.URI().Name(), filepath.Dir(r.URI().Path()), raw, rerr)
-	}, m.w)
-	d.SetFilter(storage.NewExtensionFileFilter(configExtensions))
-	m.showPicker(d)
+	m.pickFile(openRequest{Title: "Import config", Extensions: configExtensions}, func(path string) {
+		raw, err := m.readFile(path)
+		m.startImport(fileName(path), filepath.Dir(path), raw, err)
+	})
 }
 
 // startImport imports the config raw, read from the file name in dir.
@@ -183,22 +170,15 @@ func (f *importFlow) fix(a fixAction) {
 // folder with no filter, and continues the import with it.
 func (f *importFlow) chooseFile(key string) {
 	m := f.m
-	d := dialog.NewFileOpen(func(r fyne.URIReadCloser, err error) {
-		if err != nil || r == nil {
-			return
-		}
-		path, name := r.URI().Path(), r.URI().Name()
-		_ = r.Close()
-		m.log.Add("import file chosen", "file", f.name, "for", "pki."+key, "chosen", name)
+	title := "Choose your certificate file"
+	if key == "key" {
+		title = "Choose your key file"
+	}
+	m.pickFile(openRequest{Title: title, StartDir: f.opts.Home}, func(path string) {
+		m.log.Add("import file chosen", "file", f.name, "for", "pki."+key, "chosen", fileName(path))
 		f.opts.Picked[key] = path
 		f.run()
-	}, m.w)
-	if f.opts.Home != "" {
-		if l, err := storage.ListerForURI(storage.NewFileURI(f.opts.Home)); err == nil {
-			d.SetLocation(l)
-		}
-	}
-	m.showPicker(d)
+	})
 }
 
 // inlineProblem returns the catalogue entry for an error from inlinePKI or

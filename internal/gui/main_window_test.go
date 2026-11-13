@@ -19,6 +19,7 @@ func testWindow(t *testing.T, svc *fakeService) (*mainWindow, func()) {
 	a := test.NewTempApp(t)
 	m := newMainWindow(a, svc, newAppLog(), "0.2.0")
 	m.spawn = func(f func()) { f() }
+	m.nativeOpen = nil // never open the desktop's real picker from a test
 	t.Cleanup(m.w.Close)
 	return m, func() {
 		r, _ := m.poller.poll(context.Background())

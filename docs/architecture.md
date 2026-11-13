@@ -72,7 +72,7 @@ The GUI can be closed and reopened while the tunnel stays up. Each time it conne
   - peer table;
   - "Ping…" dialog that takes an overlay IP, or a context-menu ping on a peer row;
   - log view.
-- **Config import**: a file picker for `config.yml`. Relative `pki.*` paths are resolved and the files are read **in the GUI process**, as the user. Their contents are inlined into the YAML before it is sent to the service. See [security.md](security.md).
+- **Config import**: a file picker for `config.yml` (the desktop's own through the XDG Desktop Portal on Linux, Fyne's elsewhere for now). Relative `pki.*` paths are resolved and the files are read **in the GUI process**, as the user. Their contents are inlined into the YAML before it is sent to the service. See [security.md](security.md).
 - **System tray** (`fyne/driver/desktop`): Connect/Disconnect, status, Open, and Quit.
 - **Poller**: calls `GET /v1/status` and `GET /v1/peers` every 2 s while the window is visible, and less often when hidden. It updates Fyne data bindings.
 

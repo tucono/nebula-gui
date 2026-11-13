@@ -7,6 +7,7 @@ toolchain go1.27.4
 require (
 	fyne.io/fyne/v2 v2.8.2
 	github.com/Microsoft/go-winio v0.6.4
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/slackhq/nebula v1.12.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.58.0
@@ -37,7 +38,6 @@ require (
 	github.com/go-gl/glfw/v3.4/glfw v0.1.0-pre.2 // indirect
 	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
-	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
