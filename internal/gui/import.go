@@ -55,7 +55,7 @@ func (m *mainWindow) importConfig() {
 		m.startImport(r.URI().Name(), filepath.Dir(r.URI().Path()), raw, rerr)
 	}, m.w)
 	d.SetFilter(storage.NewExtensionFileFilter(configExtensions))
-	d.Show()
+	m.showPicker(d)
 }
 
 // startImport imports the config raw, read from the file name in dir.
@@ -198,7 +198,7 @@ func (f *importFlow) chooseFile(key string) {
 			d.SetLocation(l)
 		}
 	}
-	d.Show()
+	m.showPicker(d)
 }
 
 // inlineProblem returns the catalogue entry for an error from inlinePKI or

@@ -63,6 +63,9 @@ type mainWindow struct {
 	importB  *widget.Button
 	removeB  *widget.Button
 	footer   *widget.RichText
+
+	// picker is the open file picker, kept the size of the window.
+	picker *dialog.FileDialog
 }
 
 func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *mainWindow {
@@ -122,13 +125,14 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 	// a window whose content no longer fits, and some Wayland compositors
 	// (seen on COSMIC) ignore that, which leaves the layout taller than the
 	// window and the mouse out of step with it.
-	m.w.SetContent(container.NewVScroll(container.NewPadded(container.NewVBox(
+	scroll := container.NewVScroll(container.NewPadded(container.NewVBox(
 		m.banner.Object(),
 		m.waiting,
 		m.header,
 		widget.NewSeparator(),
 		m.footer,
-	))))
+	)))
+	m.w.SetContent(container.New(&resizeWatcher{onResize: func(fyne.Size) { m.fitPicker() }}, scroll))
 	m.w.Resize(fyne.NewSize(520, 420))
 	m.render()
 	return m
@@ -243,6 +247,61 @@ func (m *mainWindow) versionsLine() string {
 		svc = orDash(m.version.ServiceVersion)
 	}
 	return fmt.Sprintf("app %s, service %s, service address %s", m.appVersion, svc, m.c.Addr())
+}
+
+// resizeWatcher fills the window with its one object and reports the new
+// size; Fyne has no resize callback on a window. Its min size is the
+// object's, so it never asks the window to grow.
+type resizeWatcher struct {
+	onResize func(fyne.Size)
+	last     fyne.Size
+}
+
+func (r *resizeWatcher) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	for _, o := range objs {
+		o.Move(fyne.NewPos(0, 0))
+		o.Resize(size)
+	}
+	if size != r.last {
+		r.last = size
+		r.onResize(size)
+	}
+}
+
+func (r *resizeWatcher) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	var s fyne.Size
+	for _, o := range objs {
+		s = s.Max(o.MinSize())
+	}
+	return s
+}
+
+// pickerMargin is the space left around the file picker, so the window
+// behind it still shows.
+const pickerMargin = 24
+
+// showPicker opens a file picker that fills the window and follows it when
+// the window is resized. Fyne's picker is drawn inside the window and
+// can't be resized by itself, and its default size is small.
+func (m *mainWindow) showPicker(d *dialog.FileDialog) {
+	m.picker = d
+	d.SetOnClosed(func() {
+		if m.picker == d {
+			m.picker = nil
+		}
+	})
+	d.Show()
+	m.fitPicker()
+}
+
+// fitPicker sizes the open picker to the window. Fyne keeps it at least at
+// its min size, and no larger than the window.
+func (m *mainWindow) fitPicker() {
+	win := m.w.Canvas().Size()
+	if m.picker == nil || win.IsZero() {
+		return
+	}
+	m.picker.Resize(win.SubtractWidthHeight(2*pickerMargin, 2*pickerMargin))
 }
 
 func setEnabled(b *widget.Button, on bool) {

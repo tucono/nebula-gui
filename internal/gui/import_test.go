@@ -179,3 +179,34 @@ func TestRemoveConfig(t *testing.T) {
 		t.Fatalf("after remove: banner %+v", p)
 	}
 }
+
+func TestPickerFollowsWindow(t *testing.T) {
+	m, poll := importWindow(t, newFakeService(), nil)
+	poll()
+	m.importConfig()
+	if m.picker == nil {
+		t.Fatal("no picker")
+	}
+	pickerSize := func() fyne.Size {
+		t.Helper()
+		p, ok := find(t, topDialog(t, m), func(*widget.PopUp) bool { return true })
+		if !ok {
+			t.Fatal("picker pop-up not found")
+		}
+		return p.Content.Size()
+	}
+	margin := float32(2 * pickerMargin)
+	if got, want := pickerSize(), m.w.Canvas().Size().SubtractWidthHeight(margin, margin); got != want {
+		t.Fatalf("picker %v, want %v", got, want)
+	}
+
+	m.w.Resize(fyne.NewSize(900, 700))
+	if got, want := pickerSize(), m.w.Canvas().Size().SubtractWidthHeight(margin, margin); got != want {
+		t.Fatalf("after resize: picker %v, want %v", got, want)
+	}
+
+	button(t, topDialog(t, m), "Cancel").OnTapped()
+	if m.picker != nil {
+		t.Fatal("picker still tracked after Cancel")
+	}
+}
