@@ -26,14 +26,15 @@ type actionClient interface {
 	Disconnect(ctx context.Context) (*api.StatusResponse, error)
 	PutConfig(ctx context.Context, yaml string) (*api.ConfigPutResponse, error)
 	DeleteConfig(ctx context.Context) (*api.StatusResponse, error)
+	ClosePeer(ctx context.Context, vpnIP string) error
 	Diagnostics(ctx context.Context, lines int) (*api.DiagnosticsResponse, error)
 	logsClient
 	Addr() string
 }
 
 // mainWindow is the app's window. The Status tab has a problem banner or
-// the status header, then the versions in small print; the Logs tab has
-// the service log. Its fields are only touched on the UI
+// the status header, then the versions in small print; the Peers tab
+// lists peers; the Logs tab has the service log. Its fields are only touched on the UI
 // goroutine; the poller and the actions hand results over with fyne.Do.
 type mainWindow struct {
 	a         fyne.App
@@ -74,6 +75,7 @@ type mainWindow struct {
 	footer   *widget.RichText
 	tabs     *container.AppTabs
 	logs     *logView
+	peers    *peersView
 	// help is the open Get help dialog, or nil.
 	help *helpDialog
 
@@ -114,6 +116,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 	m.poller = newPoller(c, log, m.gate)
 	m.logPoller = newLogPoller(c)
 	m.logs = newLogView(newLogModel(), func() { m.openHelp(m.bannerProblem()) })
+	m.peers = newPeersView(m.showPeerMenu)
 
 	m.banner = newProblemView(problemHandlers{
 		OnFix:     m.fix,
@@ -168,10 +171,12 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 	)))
 	m.tabs = container.NewAppTabs(
 		container.NewTabItem("Status", scroll),
+		container.NewTabItem("Peers", m.peers.root),
 		container.NewTabItem("Logs", m.logs.root),
 	)
 	m.tabs.OnSelected = func(*container.TabItem) {
 		m.logPoller.SetFast(m.logsShowing())
+		m.poller.SetPeersFast(m.peersShowing())
 	}
 	m.w.SetMainMenu(m.mainMenu())
 	m.w.SetContent(container.New(&resizeWatcher{onResize: func(fyne.Size) {
@@ -326,6 +331,8 @@ func (m *mainWindow) render() {
 		},
 	}}
 	m.footer.Refresh()
+
+	m.renderPeers()
 }
 
 func (m *mainWindow) footerText() string {

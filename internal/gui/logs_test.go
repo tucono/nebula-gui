@@ -198,7 +198,7 @@ func TestMainWindowLogs(t *testing.T) {
 	if m.logPoller.fast.Load() {
 		t.Fatal("fast while the Status tab shows")
 	}
-	m.tabs.SelectIndex(1)
+	m.tabs.SelectIndex(2)
 	if !m.logsShowing() || !m.logPoller.fast.Load() {
 		t.Fatal("not fast with the Logs tab showing")
 	}

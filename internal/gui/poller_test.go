@@ -32,6 +32,7 @@ type fakeService struct {
 	logLines  []api.LogLine // line i has seq i
 	peers     []api.Peer
 	peersErr  error
+	closeErr  error
 }
 
 func newFakeService() *fakeService {
@@ -124,6 +125,25 @@ func (f *fakeService) Disconnect(context.Context) (*api.StatusResponse, error) {
 	}
 	f.state = api.StateStopped
 	return f.statusLocked(), nil
+}
+
+func (f *fakeService) ClosePeer(_ context.Context, vpnIP string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "close "+vpnIP)
+	if f.closeErr != nil {
+		return f.closeErr
+	}
+	if f.state != api.StateRunning {
+		return &api.Error{Code: api.CodeNotRunning, Message: "nebula is not running"}
+	}
+	for i, p := range f.peers {
+		if slices.Contains(p.VpnIPs, vpnIP) {
+			f.peers = slices.Delete(f.peers, i, i+1)
+			return nil
+		}
+	}
+	return &api.Error{Code: api.CodeNotFound, Message: "no tunnel"}
 }
 
 func (f *fakeService) Addr() string { return "/run/user/1000/nebula-guid.sock" }

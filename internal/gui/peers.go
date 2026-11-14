@@ -5,7 +5,6 @@ package gui
 
 import (
 	"cmp"
-	"errors"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -191,14 +190,7 @@ func (e *peerInputError) Error() string { return e.Msg }
 // against the networks in st when it has any; otherwise only its format is.
 func checkNewPeer(name, ip string, st *api.StatusResponse, saved []savedPeer) error {
 	if _, err := cleanPeerName(name); err != nil {
-		msg := "Give it a name."
-		switch {
-		case errors.Is(err, errPeerNameLong):
-			msg = "That name is too long. Names can be at most " + strconv.Itoa(maxPeerNameLen) + " characters."
-		case errors.Is(err, errPeerNameCtrl):
-			msg = "Names can't contain line breaks or tabs."
-		}
-		return &peerInputError{Field: "name", Msg: msg}
+		return &peerInputError{Field: "name", Msg: peerNameMessage(err)}
 	}
 	overlays := statusOverlays(st)
 	a, err := parsePeerAddr(ip)
