@@ -14,12 +14,14 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/tucono/nebula-gui/internal/api"
+	"github.com/tucono/nebula-gui/internal/nebulactl"
 )
 
 const (
@@ -103,6 +105,8 @@ func New(opts Options) (*Server, error) {
 	s.mux.HandleFunc("POST /v1/disconnect", s.handleDisconnect)
 	s.mux.HandleFunc("GET /v1/logs", s.handleLogs)
 	s.mux.HandleFunc("GET /v1/diagnostics", s.handleDiagnostics)
+	s.mux.HandleFunc("GET /v1/peers", s.handlePeers)
+	s.mux.HandleFunc("POST /v1/peers/{vpn_ip}/close", s.handleClosePeer)
 	return s, nil
 }
 
@@ -264,6 +268,25 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, resp)
 }
 
+func (s *Server) handlePeers(w http.ResponseWriter, _ *http.Request) {
+	s.writeJSON(w, http.StatusOK, api.PeersResponse{Peers: s.mgr.peers()})
+}
+
+func (s *Server) handleClosePeer(w http.ResponseWriter, r *http.Request) {
+	addr, err := netip.ParseAddr(r.PathValue("vpn_ip"))
+	if err != nil {
+		s.writeError(w, api.CodeBadRequest, "vpn_ip is not an IP address")
+		return
+	}
+	addr = addr.Unmap()
+	if err := s.mgr.closePeer(addr); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	s.log.Info("tunnel closed", "vpn_ip", addr.String())
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // writeErr maps an error from the manager to an API error. Unknown errors
 // are logged and reported as internal without detail.
 func (s *Server) writeErr(w http.ResponseWriter, err error) {
@@ -278,6 +301,8 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 		s.writeError(w, api.CodeAlreadyRunning, err.Error())
 	case errors.Is(err, errNotRunning):
 		s.writeError(w, api.CodeNotRunning, err.Error())
+	case errors.Is(err, nebulactl.ErrNoTunnel):
+		s.writeError(w, api.CodeNotFound, err.Error())
 	case errors.As(err, &se):
 		s.writeReasonError(w, api.CodeInternal, se.reason, se.Error())
 	default:
@@ -302,6 +327,8 @@ func httpStatus(code api.ErrorCode) int {
 		return http.StatusUnprocessableEntity
 	case api.CodeNotConfigured, api.CodeAlreadyRunning, api.CodeNotRunning:
 		return http.StatusConflict
+	case api.CodeNotFound:
+		return http.StatusNotFound
 	default:
 		return http.StatusInternalServerError
 	}

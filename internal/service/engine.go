@@ -5,6 +5,7 @@ package service
 
 import (
 	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/tucono/nebula-gui/internal/api"
@@ -34,6 +35,12 @@ type Instance interface {
 	Done() <-chan struct{}
 	// Err is the fatal error that stopped Nebula, if any, once Done is closed.
 	Err() error
+	// Hosts lists established tunnels, or pending handshakes if pending
+	// is set.
+	Hosts(pending bool) []nebulactl.HostInfo
+	// CloseTunnel closes the tunnel to addr and tells the peer. It returns
+	// nebulactl.ErrNoTunnel when there is no tunnel to addr.
+	CloseTunnel(addr netip.Addr) error
 }
 
 // ConfigInfo is what the status endpoint reports about a config.

@@ -5,11 +5,14 @@ package service
 
 import (
 	"errors"
+	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tucono/nebula-gui/internal/api"
+	"github.com/tucono/nebula-gui/internal/nebulactl"
 )
 
 const fakeNebulaVersion = "9.9.9-fake"
@@ -77,6 +80,41 @@ type fakeInstance struct {
 	done    chan struct{}
 	err     error
 	stopped bool
+
+	mu      sync.Mutex
+	hosts   []nebulactl.HostInfo // established tunnels
+	pending []nebulactl.HostInfo // pending handshakes
+	closed  []netip.Addr
+}
+
+// setHosts replaces the instance's hostmap.
+func (i *fakeInstance) setHosts(established, pending []nebulactl.HostInfo) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.hosts, i.pending = established, pending
+}
+
+func (i *fakeInstance) Hosts(pending bool) []nebulactl.HostInfo {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if pending {
+		return slices.Clone(i.pending)
+	}
+	return slices.Clone(i.hosts)
+}
+
+// CloseTunnel removes an established tunnel, like Nebula's Control does.
+func (i *fakeInstance) CloseTunnel(addr netip.Addr) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	for n, h := range i.hosts {
+		if slices.Contains(h.VpnAddrs, addr) {
+			i.hosts = slices.Delete(i.hosts, n, n+1)
+			i.closed = append(i.closed, addr)
+			return nil
+		}
+	}
+	return nebulactl.ErrNoTunnel
 }
 
 func (i *fakeInstance) Stop() {

@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -129,6 +130,20 @@ func (c *Client) Diagnostics(ctx context.Context, lines int) (*DiagnosticsRespon
 		return nil, err
 	}
 	return &r, nil
+}
+
+// Peers calls GET /v1/peers.
+func (c *Client) Peers(ctx context.Context) (*PeersResponse, error) {
+	var r PeersResponse
+	if err := c.do(ctx, http.MethodGet, "/v1/peers", nil, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// ClosePeer calls POST /v1/peers/{vpnIP}/close.
+func (c *Client) ClosePeer(ctx context.Context, vpnIP string) error {
+	return c.do(ctx, http.MethodPost, "/v1/peers/"+url.PathEscape(vpnIP)+"/close", nil, nil)
 }
 
 func (c *Client) statusCall(ctx context.Context, method, path string) (*StatusResponse, error) {

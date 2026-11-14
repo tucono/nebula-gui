@@ -136,7 +136,7 @@ No body. Returns the new `status`.
   ]
 }
 ```
-The data comes from `Control.ListHostmapHosts`: established tunnels first, then pending handshakes. A host in both is listed once, as established. When Nebula isn't running, `peers` is empty (not an error).
+The data comes from `Control.ListHostmapHosts`: established tunnels first, then pending handshakes. A host in both is listed once, as established. Within each group, peers are ordered by overlay IP. When Nebula isn't running, `peers` is empty (not an error). `current_remote` is `""` when the peer is relayed or not reached yet, and `cert_not_after` is `null` while the peer's cert isn't known (pending handshakes).
 
 Nebula has no per-peer byte or latency counters, so `last_ping_rtt_ms` is the only latency figure: the average RTT of the last ping to that peer that got a reply. It's kept in memory and cleared on disconnect.
 

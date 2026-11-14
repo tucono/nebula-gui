@@ -76,6 +76,7 @@ const (
 	CodeNotConfigured  ErrorCode = "not_configured"
 	CodeAlreadyRunning ErrorCode = "already_running"
 	CodeNotRunning     ErrorCode = "not_running"
+	CodeNotFound       ErrorCode = "not_found"
 	CodePingFailed     ErrorCode = "ping_failed"
 	CodeInternal       ErrorCode = "internal"
 )
@@ -145,6 +146,38 @@ type ConfigPutResponse struct {
 // ConfigResponse is returned by GET /v1/config. pki.key is redacted.
 type ConfigResponse struct {
 	YAML string `json:"yaml"`
+}
+
+// PeerState says whether a peer's tunnel is up.
+type PeerState string
+
+// Peer states.
+const (
+	PeerEstablished PeerState = "established"
+	PeerPending     PeerState = "pending"
+)
+
+// Peer is a host this one has a tunnel, or a pending handshake, with.
+type Peer struct {
+	VpnIPs []string  `json:"vpn_ips"`
+	Name   string    `json:"name"`
+	Groups []string  `json:"groups"`
+	State  PeerState `json:"state"`
+	// CurrentRemote is the underlay address in use; empty when relayed or
+	// not known yet.
+	CurrentRemote string   `json:"current_remote"`
+	RemoteAddrs   []string `json:"remote_addrs"`
+	Relayed       bool     `json:"relayed"`
+	// CertNotAfter is nil when the peer's cert isn't known yet (pending).
+	CertNotAfter *time.Time `json:"cert_not_after"`
+	// LastPingRTTMs is the average RTT of the last ping to this peer that
+	// got a reply; nil if there was none since Nebula started.
+	LastPingRTTMs *float64 `json:"last_ping_rtt_ms"`
+}
+
+// PeersResponse is returned by GET /v1/peers.
+type PeersResponse struct {
+	Peers []Peer `json:"peers"`
 }
 
 // LogsResponse is returned by GET /v1/logs.
