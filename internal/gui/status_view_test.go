@@ -89,6 +89,30 @@ func TestDescribeStatus(t *testing.T) {
 	}
 }
 
+func TestHeadlinePeerCount(t *testing.T) {
+	st := &api.StatusResponse{State: api.StateRunning, Configured: true, OverlayIPs: []string{"192.168.100.20/24"}}
+	est := apiPeer(api.PeerEstablished, "alice", "192.168.100.10")
+	pend := apiPeer(api.PeerPending, "bob", "192.168.100.11")
+	for _, tc := range []struct {
+		peers []api.Peer
+		want  string
+	}{
+		{nil, "Connected"},
+		{[]api.Peer{}, "Connected"},
+		{[]api.Peer{pend}, "Connected"},
+		{[]api.Peer{est, pend}, "Connected · 1 peer"},
+		{[]api.Peer{est, est, pend}, "Connected · 2 peers"},
+	} {
+		if got := describeStatus(statusInput{Status: st, Peers: tc.peers}).Headline; got != tc.want {
+			t.Errorf("%d peers: %q, want %q", len(tc.peers), got, tc.want)
+		}
+	}
+	stopped := &api.StatusResponse{State: api.StateStopped, Configured: true}
+	if got := describeStatus(statusInput{Status: stopped, Peers: []api.Peer{est}}).Headline; got != "Not connected" {
+		t.Errorf("stopped: %q", got)
+	}
+}
+
 func TestDescribeStatusDetails(t *testing.T) {
 	now := time.Date(2026, 11, 13, 14, 0, 0, 0, time.Local)
 	started := now.Add(-5 * time.Minute)

@@ -43,6 +43,9 @@ func Run(opts Options) {
 	if p, err := defaultNameStorePath(); err == nil {
 		m.names = openNameStore(p)
 	}
+	if p, err := defaultPeerStorePath(); err == nil {
+		m.saved = openPeerStore(p)
+	}
 	m.start()
 	m.w.ShowAndRun()
 	m.close()

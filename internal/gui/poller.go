@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tucono/nebula-gui/internal/api"
@@ -26,12 +27,16 @@ const (
 	// take more than 10 s while Nebula's packet readers exit, and a slow
 	// but successful action must not show "isn't responding".
 	actionTimeout = 30 * time.Second
+	// peersSlowInterval is how often peers are read while the Peers tab
+	// isn't showing. While it shows, they're read on every poll.
+	peersSlowInterval = 10 * time.Second
 )
 
 // serviceClient is the part of api.Client the poller uses.
 type serviceClient interface {
 	Version(ctx context.Context) (*api.VersionResponse, error)
 	Status(ctx context.Context) (*api.StatusResponse, error)
+	Peers(ctx context.Context) (*api.PeersResponse, error)
 }
 
 // pollResult is what one poll learned. Exactly one of Err and Status is
@@ -46,6 +51,11 @@ type pollResult struct {
 	Version *api.VersionResponse
 	Status  *api.StatusResponse
 	Err     error
+	// PeersUpdated says Peers is a fresh list: read this round while
+	// Nebula runs, or empty because it doesn't. When it's false, the
+	// previous list still stands.
+	PeersUpdated bool
+	Peers        []api.Peer
 }
 
 type reachability int
@@ -61,11 +71,19 @@ const (
 // while the service can't be reached. It notices a service restart by the
 // instance ID and checks the version again. It records changes, not every
 // poll, in the GUI log.
+//
+// While Nebula runs it also reads the peers: on every poll while peersFast
+// is set (the Peers tab shows), otherwise every peersSlowInterval, and at
+// once after Poke.
 type poller struct {
 	c    serviceClient
 	log  *appLog
 	gate *statusGate
 	wake chan struct{}
+	now  func() time.Time
+
+	peersFast atomic.Bool
+	peersNow  atomic.Bool // Poke asked for fresh peers
 
 	// Only the polling goroutine touches these.
 	versionOK  bool // the version was checked since the last (re)connect
@@ -75,14 +93,26 @@ type poller struct {
 	lastState  api.State
 	lastConfig bool
 	failures   int
+	peersAt    time.Time // when peers were last read, zero if not yet
+	peersErr   bool      // the last peers read failed, and that was logged
 }
 
 func newPoller(c serviceClient, log *appLog, gate *statusGate) *poller {
-	return &poller{c: c, log: log, gate: gate, wake: make(chan struct{}, 1)}
+	return &poller{c: c, log: log, gate: gate, wake: make(chan struct{}, 1), now: time.Now}
 }
 
-// Poke makes the poller poll now instead of waiting.
+// SetPeersFast switches between reading peers on every poll and every
+// peersSlowInterval. Switching to fast polls at once.
+func (p *poller) SetPeersFast(on bool) {
+	if p.peersFast.Swap(on) != on && on {
+		p.Poke()
+	}
+}
+
+// Poke makes the poller poll now instead of waiting, and read the peers
+// too.
 func (p *poller) Poke() {
+	p.peersNow.Store(true)
 	select {
 	case p.wake <- struct{}{}:
 	default:
@@ -148,7 +178,38 @@ func (p *poller) poll(ctx context.Context) (pollResult, time.Duration) {
 	p.noteStatus(st)
 	r.Status = st
 	p.failures = 0
+	p.pollPeers(ctx, st, &r)
 	return r, pollInterval
+}
+
+// pollPeers reads the peers into r when they're due. A failed read keeps
+// the previous list: the status answered, so the service is up, and the
+// next poll tries again.
+func (p *poller) pollPeers(ctx context.Context, st *api.StatusResponse, r *pollResult) {
+	if st.State != api.StateRunning {
+		p.peersAt = time.Time{}
+		p.peersNow.Store(false)
+		r.PeersUpdated, r.Peers = true, nil
+		return
+	}
+	now := p.now()
+	forced := p.peersNow.Swap(false)
+	if !forced && !p.peersFast.Load() && !p.peersAt.IsZero() && now.Sub(p.peersAt) < peersSlowInterval {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
+	resp, err := p.c.Peers(ctx)
+	if err != nil {
+		if !p.peersErr {
+			p.peersErr = true
+			p.log.Add("couldn't read peers", "error", err.Error())
+		}
+		return
+	}
+	p.peersErr = false
+	p.peersAt = now
+	r.PeersUpdated, r.Peers = true, resp.Peers
 }
 
 func (p *poller) version(ctx context.Context) (*api.VersionResponse, error) {
@@ -193,6 +254,7 @@ func (p *poller) failed(r pollResult, err error) (pollResult, time.Duration) {
 	p.versionOK = false
 	p.instance = ""
 	p.lastState = ""
+	p.peersAt = time.Time{}
 	p.failures++
 	r.Err = err
 	return r, backoff(p.failures)

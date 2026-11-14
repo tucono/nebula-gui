@@ -5,6 +5,7 @@ package gui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,8 +66,10 @@ type statusInput struct {
 	NewConfig bool
 	// Acting is the action in flight.
 	Acting action
-	Now    time.Time
-	GOOS   string
+	// Peers is Nebula's latest peer list, nil before it's known.
+	Peers []api.Peer
+	Now   time.Time
+	GOOS  string
 }
 
 // statusView is what the window shows. It is plain data so it can be
@@ -139,6 +142,7 @@ func describeStatus(in statusInput) statusView {
 	switch st.State {
 	case api.StateRunning:
 		v.Headline, v.Button, v.ButtonAction, v.ButtonEnabled = "Connected", "Disconnect", actDisconnect, true
+		v.Headline += peerCount(in.Peers)
 	case api.StateStarting:
 		v.Headline, v.Button, v.ButtonAction, v.Busy = "Connecting…", "Connect", actConnect, true
 	case api.StateStopping:
@@ -197,4 +201,23 @@ func joinNonEmpty(a, b string) string {
 		return a
 	}
 	return a + " " + b
+}
+
+// peerCount is " · 2 peers" for the headline: the number of established
+// tunnels, or "" when there are none or the list isn't known yet.
+func peerCount(peers []api.Peer) string {
+	n := 0
+	for _, p := range peers {
+		if p.State == api.PeerEstablished {
+			n++
+		}
+	}
+	switch n {
+	case 0:
+		return ""
+	case 1:
+		return " · 1 peer"
+	default:
+		return " · " + strconv.Itoa(n) + " peers"
+	}
 }

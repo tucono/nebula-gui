@@ -5,6 +5,7 @@ package gui
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"slices"
@@ -29,6 +30,8 @@ type fakeService struct {
 	unconfig  bool
 	calls     []string
 	logLines  []api.LogLine // line i has seq i
+	peers     []api.Peer
+	peersErr  error
 }
 
 func newFakeService() *fakeService {
@@ -55,6 +58,19 @@ func (f *fakeService) Status(context.Context) (*api.StatusResponse, error) {
 		return nil, errRefused
 	}
 	return f.statusLocked(), nil
+}
+
+func (f *fakeService) Peers(context.Context) (*api.PeersResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "peers")
+	if f.down {
+		return nil, errRefused
+	}
+	if f.peersErr != nil {
+		return nil, f.peersErr
+	}
+	return &api.PeersResponse{Peers: slices.Clone(f.peers)}, nil
 }
 
 func (f *fakeService) statusLocked() *api.StatusResponse {
@@ -190,7 +206,7 @@ func TestPollerSequence(t *testing.T) {
 	if r.Version == nil || r.Status == nil || d != pollInterval {
 		t.Fatalf("after recovery: %+v, %v", r, d)
 	}
-	if c := svc.takeCalls(); !equal(c, []string{"version", "status"}) {
+	if c := svc.takeCalls(); !equal(c, []string{"version", "status", "peers"}) {
 		t.Fatalf("after recovery calls %v", c)
 	}
 
@@ -274,6 +290,86 @@ func TestPollerRunAndPoke(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("run didn't stop")
+	}
+}
+
+func TestPollerPeers(t *testing.T) {
+	svc := newFakeService()
+	log := newAppLog()
+	p := newPoller(svc, log, &statusGate{})
+	clock := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	p.now = func() time.Time { return clock }
+	ctx := context.Background()
+	alice := apiPeer(api.PeerEstablished, "alice", "192.168.100.10")
+
+	// Not running: peers aren't asked for, and the list is empty.
+	r, _ := p.poll(ctx)
+	if !r.PeersUpdated || r.Peers != nil {
+		t.Fatalf("stopped: %+v", r)
+	}
+	if c := svc.takeCalls(); slices.Contains(c, "peers") {
+		t.Fatalf("asked for peers while stopped: %v", c)
+	}
+
+	// Running: read at once, then every 10 s.
+	svc.set(func(f *fakeService) { f.state = api.StateRunning; f.peers = []api.Peer{alice} })
+	r, _ = p.poll(ctx)
+	if !r.PeersUpdated || len(r.Peers) != 1 || r.Peers[0].Name != "alice" {
+		t.Fatalf("first running poll: %+v", r)
+	}
+	svc.takeCalls()
+	clock = clock.Add(2 * time.Second)
+	if r, _ = p.poll(ctx); r.PeersUpdated {
+		t.Fatal("read peers again after 2 s while slow")
+	}
+	clock = clock.Add(8 * time.Second)
+	if r, _ = p.poll(ctx); !r.PeersUpdated {
+		t.Fatal("didn't read peers after 10 s")
+	}
+
+	// Poke reads them at once.
+	clock = clock.Add(2 * time.Second)
+	p.Poke()
+	<-p.wake
+	if r, _ = p.poll(ctx); !r.PeersUpdated {
+		t.Fatal("Poke didn't read peers")
+	}
+
+	// Fast: every poll.
+	p.SetPeersFast(true)
+	<-p.wake
+	for i := range 3 {
+		clock = clock.Add(2 * time.Second)
+		if r, _ = p.poll(ctx); !r.PeersUpdated {
+			t.Fatalf("fast poll %d didn't read peers", i)
+		}
+	}
+	p.SetPeersFast(false)
+
+	// A failed read keeps the old list and is logged once.
+	svc.set(func(f *fakeService) { f.peersErr = errors.New("boom") })
+	for range 2 {
+		p.Poke()
+		<-p.wake
+		r, _ = p.poll(ctx)
+		if r.PeersUpdated || r.Status == nil || r.Err != nil {
+			t.Fatalf("failed peers read: %+v", r)
+		}
+	}
+	n := 0
+	for _, m := range msgs(log) {
+		if m == "couldn't read peers" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("logged the peers error %d times", n)
+	}
+
+	// Disconnected: the list empties.
+	svc.set(func(f *fakeService) { f.peersErr = nil; f.state = api.StateStopped })
+	if r, _ = p.poll(ctx); !r.PeersUpdated || r.Peers != nil {
+		t.Fatalf("after disconnect: %+v", r)
 	}
 }
 

@@ -63,6 +63,27 @@ func TestMainWindowConnectDisconnect(t *testing.T) {
 	}
 }
 
+func TestMainWindowPeerCount(t *testing.T) {
+	svc := newFakeService()
+	svc.set(func(f *fakeService) {
+		f.state = api.StateRunning
+		f.peers = []api.Peer{
+			apiPeer(api.PeerEstablished, "lighthouse", "192.168.100.1"),
+			apiPeer(api.PeerEstablished, "alice", "192.168.100.10"),
+		}
+	})
+	m, poll := testWindow(t, svc)
+	poll()
+	if m.headline.Text != "Connected · 2 peers" {
+		t.Fatalf("headline %q", m.headline.Text)
+	}
+	svc.set(func(f *fakeService) { f.state = api.StateStopped })
+	poll()
+	if m.headline.Text != "Not connected" || m.in.Peers != nil {
+		t.Fatalf("after disconnect: %q, peers %v", m.headline.Text, m.in.Peers)
+	}
+}
+
 func TestMainWindowConnectFails(t *testing.T) {
 	svc := newFakeService()
 	m, poll := testWindow(t, svc)

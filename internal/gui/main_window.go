@@ -44,7 +44,9 @@ type mainWindow struct {
 	poller    *poller
 	logPoller *logPoller
 	// names are remembered for masking troubleshooting reports.
-	names      *nameStore
+	names *nameStore
+	// saved are the peers the user named. They never go in a report.
+	saved      *peerStore
 	appVersion string
 	// spawn runs an action's call off the UI goroutine. Tests replace it
 	// to run the call in place.
@@ -101,6 +103,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		log:        log,
 		gate:       &statusGate{},
 		names:      openNameStore(""),
+		saved:      openPeerStore(""),
 		appVersion: appVersion,
 		spawn:      func(f func()) { go f() },
 		readFile:   readCapped,
@@ -250,11 +253,14 @@ func (m *mainWindow) applyPoll(r pollResult) {
 	if m.gate.Accept(r.Seq) {
 		switch {
 		case r.Err != nil:
-			m.in.Err, m.in.Status = r.Err, nil
+			m.in.Err, m.in.Status, m.in.Peers = r.Err, nil, nil
 		case r.Status != nil:
 			m.applyStatus(r.Status)
+			if r.PeersUpdated {
+				m.in.Peers = r.Peers
+			}
 		default: // another API version: no status to show
-			m.in.Err, m.in.Status = nil, nil
+			m.in.Err, m.in.Status, m.in.Peers = nil, nil, nil
 		}
 	}
 	m.render()
