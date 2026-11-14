@@ -19,13 +19,13 @@
 ## M2: GUI basics
 Detailed plan: [m2-plan.md](m2-plan.md).
 
-- [ ] Config import with PEM inlining
-- [ ] Status header plus Connect/Disconnect
-- [ ] Log view
-- [ ] Clear errors when the service isn't installed or running, or the user lacks permission
-- [ ] Plain-language errors with direct fixes, based on error reasons from the service
-- [ ] Persistent service log plus `GET /v1/diagnostics`
-- [ ] "Get help" troubleshooting report for AI assistants, with private network details masked
+- [x] Config import with PEM inlining
+- [x] Status header plus Connect/Disconnect
+- [x] Log view
+- [x] Clear errors when the service isn't installed or running, or the user lacks permission
+- [x] Plain-language errors with direct fixes, based on error reasons from the service
+- [x] Persistent service log plus `GET /v1/diagnostics`
+- [x] "Get help" troubleshooting report for AI assistants, with private network details masked
 
 ## M3: Peers and ping
 - [ ] `GET /v1/peers`, `POST /v1/peers/{ip}/close`

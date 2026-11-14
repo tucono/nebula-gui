@@ -9,7 +9,7 @@ A user loads a Nebula config. The app starts and stops the tunnel, shows which p
 
 > **Personal project.** Built for a private Nebula network shared with friends and family. The repo is public so they can download releases and updates. You're welcome to use it, but there's no support, and issues or pull requests may go unanswered.
 
-> **Status:** pre-alpha. The M0 skeleton (service + GUI talking over local IPC) works; Nebula isn't embedded yet. See [docs/roadmap.md](docs/roadmap.md).
+> **Status:** pre-alpha. The service embeds Nebula, and the GUI can import a config, connect and disconnect, show the service log, explain problems in plain language, and make a masked troubleshooting report (M2). Peers and ping (M3), installers and the tray (M4) aren't done yet, so for now the service is started by hand. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Goals
 

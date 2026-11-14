@@ -66,15 +66,16 @@ The GUI can be closed and reopened while the tunnel stays up. Each time it conne
 
 ### GUI (`cmd/nebula-gui`, `internal/gui`)
 
-- **Main window**:
-  - status header showing state, overlay IP, cert name, and cert expiry;
-  - Connect/Disconnect button;
-  - peer table;
-  - "Ping…" dialog that takes an overlay IP, or a context-menu ping on a peer row;
-  - log view.
-- **Config import**: a file picker for `config.yml` (the desktop's own through the XDG Desktop Portal on Linux, Fyne's elsewhere for now). Relative `pki.*` paths are resolved and the files are read **in the GUI process**, as the user. Their contents are inlined into the YAML before it is sent to the service. See [security.md](security.md).
+- **Main window**, with two tabs:
+  - **Status**: a problem banner when something is wrong, otherwise the status header (state, overlay IP, cert name and expiry, time connected) with Connect/Disconnect, **Import config…** and **Remove config…**; the app, service and Nebula versions in small print.
+  - **Logs**: the service log from `GET /v1/logs`, read every 2 s while the tab shows and every 10 s otherwise, with Follow and a warnings-only filter.
+  - M3 adds the peer table and the "Ping…" dialog.
+- **Problems** (`problems.go`, `problem_view.go`): every error is mapped to an entry in a catalogue, from the service's error code and reason or from the transport error (service not installed, not running, no permission). Each has a plain-language title and steps, a fix button where the app can fix it, collapsed technical details, and **Get help…**. See "Friendly errors" in [m2-plan.md](m2-plan.md).
+- **GUI log** (`applog.go`): what the user did and what happened (service reachability, imports, Connect/Disconnect and their results, problems shown), kept in memory and in a rotating JSON Lines file under `os.UserConfigDir()/nebula-gui/logs/`. It covers the time the service couldn't be reached.
+- **Get help** (`report.go`, `mask.go`, `help_dialog.go`): a Markdown troubleshooting report for an AI assistant or the network's admin. It combines the problem shown, `GET /v1/diagnostics` (status, config summary, the last 300 lines of the service's log file) and the GUI log. Private network details are masked by default; see [security.md](security.md#troubleshooting-reports). Get help… is in every problem view, on the Logs tab and under Help in the menu.
+- **Config import**: a file picker for `config.yml` (the desktop's own through the XDG Desktop Portal on Linux, Fyne's elsewhere for now). Missing key files are asked for one by one, and fixable problems (such as an enabled `sshd`) offer a fix in the import dialog. Relative `pki.*` paths are resolved and the files are read **in the GUI process**, as the user. Their contents are inlined into the YAML before it is sent to the service. See [security.md](security.md).
 - **System tray** (`fyne/driver/desktop`): Connect/Disconnect, status, Open, and Quit.
-- **Poller**: calls `GET /v1/status` and `GET /v1/peers` every 2 s while the window is visible, and less often when hidden. It updates Fyne data bindings.
+- **Poller**: calls `GET /v1/status` every 2 s, backing off to 10 s while the service can't be reached, and checks `GET /v1/version` again whenever the service's instance ID changes. Results reach the widgets on the UI goroutine through `fyne.Do`. M3 adds `GET /v1/peers`; slowing down while the window is hidden comes with the tray in M4.
 
 ### Shared (`internal/api`)
 

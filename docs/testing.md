@@ -10,7 +10,7 @@
 | `internal/api` | JSON round-tripping and backward compatibility (decoding with unknown fields) |
 | `internal/service` | The state machine, using a **fake engine** so no tun device or root is needed. Config validation, including rejecting path-based `pki.*` values. Config store, redaction, log buffer. Ping input validation (M3). |
 | `internal/pki` | Inlining PEM from relative paths, and extracting cert fields |
-| `internal/gui` | Logic only (formatters, view-models). Fyne has `fyne.io/fyne/v2/test` for headless widget tests. |
+| `internal/gui` | Logic (problem catalogue, status model, PEM inlining, log formatting, masking) plus headless window tests with `fyne.io/fyne/v2/test` and a fake service. The troubleshooting report has golden files in `internal/gui/testdata/`, built from a synthetic service log that uses only documentation ranges and made-up names; run `go test ./internal/gui -run TestReportGolden -update` to rewrite them, and review the diff. |
 
 `internal/service` depends on an interface, not on Nebula directly (`internal/service/engine.go`):
 
@@ -91,12 +91,22 @@ Unit and Fyne tests can't show how the window behaves on a real desktop: layout,
 
 Note which desktop and session the check ran on (for example COSMIC on Wayland), because compositors differ.
 
-### GUI smoke test (M2/M3)
+### GUI smoke test (M2)
+Start with `make lab-up`, `make dev-service` and `make gui`, and `testlab/lab.sh broken` for step 4.
+
+1. **Import and connect.** Import `testlab/dev/config.paths.yml` and click Connect. The header shows "Connected" and `192.168.100.20`. The Logs tab shows the lighthouse's "Handshake message received". Disconnect.
+2. **Service stopped.** Stop `make dev-service`. The banner says the background service isn't running. Start it again: the banner clears within a few seconds without clicking anything.
+3. **No permission.** `chmod 000 $XDG_RUNTIME_DIR/nebula-guid.sock`. The dev service runs as you, so this is what stands in for a socket owned by another group. The banner explains the missing permission. `chmod 660` it again and the banner clears.
+4. **Bad configs.** Import each file in `testlab/dev/broken/`. Each shows its own message; `sshd.yml` offers to turn the console off, and `missing-key.yml` asks for the key file.
+5. **Re-import while connected.** Import the config again while connected. The header offers **Reconnect to use it**.
+6. **Get help.** Make a connect fail: stop the service, `sudo setcap -r bin/nebula-guid-dev`, and start `bin/nebula-guid-dev` with the arguments `make dev-service` uses. Click Connect, open **Get help…** from the banner and paste the masked report into an AI assistant. It should identify the problem without asking for anything the report should have contained. No `192.168.100.` address or lab host name appears with masking on.
+7. **Service restart.** Restart the service and open **Get help…** again. The service log still shows the lines from before the restart.
+
+### GUI smoke test (M3)
 1. Import `testlab/dev/config.paths.yml` in the GUI and connect.
-2. The status shows `running` and overlay IP `192.168.100.20`.
-3. The peer table shows the lighthouse as established.
-4. Ping `192.168.100.10`. The first attempt may say "connecting…", and after that alice appears as established with an RTT.
-5. Disconnect. The tun device disappears (`ip link`) and the peers list is empty.
+2. The peer table shows the lighthouse as established.
+3. Ping `192.168.100.10`. The first attempt may say "connecting…", and after that alice appears as established with an RTT.
+4. Disconnect. The tun device disappears (`ip link`) and the peers list is empty.
 
 ### Relay scenario (later)
 With every node on 127.0.0.1, direct UDP can't be blocked per host. Testing relays needs separate network namespaces or containers: block direct UDP between alice and the dev host, enable `relay.use_relays` and `am_relay` on the lighthouse, and check that the peer row shows `relayed: true`.

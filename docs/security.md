@@ -30,6 +30,21 @@ The service keeps a persistent log so a troubleshooting report can include what 
 - **What's in it:** the service's lines and Nebula's, at debug level, as JSON Lines. That includes overlay and underlay IPs, host names and cert names, which is why the GUI masks reports before they're shared. It never includes certificates, keys or the config: rule 3 below applies to every log line. Successful `GET` requests aren't logged, because the GUI polls them every few seconds.
 - **If it can't be opened**, the service prints a warning and runs without it. A broken log must never stop the VPN.
 
+## GUI log and troubleshooting reports
+
+### GUI log
+- **Where:** `os.UserConfigDir()/nebula-gui/logs/nebula-gui.jsonl` (for example `~/.config/nebula-gui/logs/` on Linux), rotated at 1 MiB with one old file kept. Directory `0700`, files `0600`.
+- **What's in it:** what the user did and what happened, with file names but never config contents or PEM. Paths in the home folder are written as `~/…`, and only the file name of any other path. A line containing `PRIVATE KEY` or `BEGIN NEBULA` is replaced with `[removed for safety]`.
+
+### Troubleshooting reports
+**Get help…** makes a report meant to be pasted into a chat, often a public AI assistant, so it's built to be safe to share:
+
+- **Masked by default.** Public, LAN and link-local IPv6 addresses, overlay addresses, host and cert names, lighthouse DNS names, cert groups and fingerprints are replaced with consistent placeholders (`PUBLIC-1`, `HOST-2`, …). The home folder becomes `~` and the login name `USER`. **Include network details** turns this off, for reports sent to the network's admin.
+- **Names are collected, not guessed.** They come from the status, the config summary, known log fields and remembered names. In free text only whole words of 4 or more characters that aren't on a stop list are replaced. A name that appears nowhere else, or a very short one, can stay in free text; every IP address is masked by range regardless.
+- **Remembered names** are kept in `os.UserConfigDir()/nebula-gui/mask-names.json` (`0600`), so a report made while the service can't be reached still masks the GUI log. They're deleted when the config is removed.
+- **Never in a report:** keys, certificates or the config. Certificates in log lines are shortened to name, groups, networks, expiry and issuer; public keys and signatures are dropped. Every input line containing `PRIVATE KEY` or `BEGIN NEBULA` is dropped and counted, and a finished report that still contains either is refused.
+- **Saved reports** are written with mode `0600`. Nothing is sent anywhere by the app: the user copies or saves the report.
+
 ## Rules for contributors
 1. New service endpoints must validate every input. Request bodies are capped (1 MiB, which is plenty for a config).
 2. The service never opens a path that came from a client.
