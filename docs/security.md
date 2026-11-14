@@ -15,7 +15,7 @@ The service runs with high privileges and accepts requests from local processes.
 | The config makes Nebula listen on privileged or unexpected ports, or names the tun device after an existing interface | Validate `listen.port` and `tun.dev`, or limit them to an allowlist. |
 | `sshd` debug console enabled by an imported config | `PUT /v1/config` rejects any `sshd.enabled` other than `false`. The console gives deep control over Nebula. |
 | The private key leaks through the API or logs | `GET /v1/config` redacts `pki.key`. Never log the config. The state directory is `0700` and the files are `0600`, log files included. A test runs a real Nebula with the log file at debug level and scans it for key material. |
-| Ping is used as a scanning or flooding tool | Limit `count` and `timeout_ms`, rate-limit requests, and accept only IPs inside the overlay subnets. |
+| Ping is used as a scanning or flooding tool | `count` 1–10, `timeout_ms` at most 15000, at most 4 pings in flight (one per peer) and 60 per minute, and only IPs inside this host's cert networks, never its own. |
 | An old or tampered service binary | Sign releases. The GUI checks `api_version` and shows the service version. |
 | **The updater is used to install malicious code as root/SYSTEM** | The manifest is signed with a minisign key whose public half is built into the binary. The artifact's SHA-256 must match the signed manifest. Platform code signatures are checked. Downgrades are refused. The feed URL can't be set over IPC, and the install endpoint takes only a version string ([updates.md](updates.md#verification-all-must-pass-before-installing)). |
 | A downloaded installer is swapped before it runs | Downloads go to the service's `0700` state directory. The hash is checked again immediately before running the installer. |
@@ -41,8 +41,10 @@ The service keeps a persistent log so a troubleshooting report can include what 
 
 - **Masked by default.** Public, LAN and link-local IPv6 addresses, overlay addresses, host and cert names, lighthouse DNS names, cert groups and fingerprints are replaced with consistent placeholders (`PUBLIC-1`, `HOST-2`, …). The home folder becomes `~` and the login name `USER`. **Include network details** turns this off, for reports sent to the network's admin.
 - **Names are collected, not guessed.** They come from the status, the config summary, known log fields and remembered names. In free text only whole words of 4 or more characters that aren't on a stop list are replaced. A name that appears nowhere else, or a very short one, can stay in free text; every IP address is masked by range regardless.
+- **Saved peers** are kept in `os.UserConfigDir()/nebula-gui/peers.json` (`0600`): a name and an overlay IP per peer. They stay when the config is removed.
 - **Remembered names** are kept in `os.UserConfigDir()/nebula-gui/mask-names.json` (`0600`), so a report made while the service can't be reached still masks the GUI log. They're deleted when the config is removed.
 - **Never in a report:** keys, certificates or the config. Certificates in log lines are shortened to name, groups, networks, expiry and issuer; public keys and signatures are dropped. Every input line containing `PRIVATE KEY` or `BEGIN NEBULA` is dropped and counted, and a finished report that still contains either is refused.
+- **Saved peer names** (M3) are never in a report, masked or not. They're personal ("Mom's laptop"), they don't help troubleshooting, and free-form names can't be masked reliably. The GUI log records peer actions by IP only. The report's Peers section uses the cert names and addresses from `GET /v1/peers`, which are masked like everything else.
 - **Saved reports** are written with mode `0600`. Nothing is sent anywhere by the app: the user copies or saves the report.
 
 ## Rules for contributors

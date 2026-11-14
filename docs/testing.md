@@ -8,9 +8,9 @@
 | Package | What to test |
 |---|---|
 | `internal/api` | JSON round-tripping and backward compatibility (decoding with unknown fields) |
-| `internal/service` | The state machine, using a **fake engine** so no tun device or root is needed. Config validation, including rejecting path-based `pki.*` values. Config store, redaction, log buffer. Ping input validation (M3). |
+| `internal/service` | The state machine, using a **fake engine** so no tun device or root is needed. Config validation, including rejecting path-based `pki.*` values. Config store, redaction, log buffer. Peers and close (dedup, errors), ping validation, rate limits and the RTT map, with a fake pinger (M3). |
 | `internal/pki` | Inlining PEM from relative paths, and extracting cert fields |
-| `internal/gui` | Logic (problem catalogue, status model, PEM inlining, log formatting, masking) plus headless window tests with `fyne.io/fyne/v2/test` and a fake service. The troubleshooting report has golden files in `internal/gui/testdata/`, built from a synthetic service log that uses only documentation ranges and made-up names; run `go test ./internal/gui -run TestReportGolden -update` to rewrite them, and review the diff. |
+| `internal/gui` | Logic (problem catalogue, status model, PEM inlining, log formatting, masking; in M3 the saved-peer store, peer rows, Add peer checks and ping results) plus headless window tests with `fyne.io/fyne/v2/test` and a fake service. The troubleshooting report has golden files in `internal/gui/testdata/`, built from a synthetic service log that uses only documentation ranges and made-up names; run `go test ./internal/gui -run TestReportGolden -update` to rewrite them, and review the diff. |
 
 `internal/service` depends on an interface, not on Nebula directly (`internal/service/engine.go`):
 
@@ -28,7 +28,7 @@ type Instance interface {
 }
 ```
 
-`NebulaEngine` adapts `internal/nebulactl` to it. Unit tests use a fake (`internal/service/fake_test.go`). M3 adds `Hosts` and `CloseTunnel` to `Instance`.
+`NebulaEngine` adapts `internal/nebulactl` to it. Unit tests use a fake (`internal/service/fake_test.go`). M3 adds `Hosts` and `CloseTunnel` to `Instance`, and a `pinger` interface with a fake, so ping is tested without ICMP.
 
 ### Tests with a real Nebula
 
@@ -103,10 +103,16 @@ Start with `make lab-up`, `make dev-service` and `make gui`, and `testlab/lab.sh
 7. **Service restart.** Restart the service and open **Get help…** again. The service log still shows the lines from before the restart.
 
 ### GUI smoke test (M3)
-1. Import `testlab/dev/config.paths.yml` in the GUI and connect.
-2. The peer table shows the lighthouse as established.
-3. Ping `192.168.100.10`. The first attempt may say "connecting…", and after that alice appears as established with an RTT.
-4. Disconnect. The tun device disappears (`ip link`) and the peers list is empty.
+1. Import `testlab/dev/config.paths.yml` and connect. The Peers tab shows `lighthouse` as Connected.
+2. **Add peer…** with name "Alice" and `192.168.100.10`. The row shows Alice, Not connected.
+3. Ping Alice. It may show "Connecting…" first, then Connected, direct, with an RTT. The cert name `alice` shows under the name.
+4. Try to add `10.0.0.1`, this host's own `192.168.100.20`, and `192.168.100.10` again. Each gets its own message.
+5. **Close connection** on Alice. She goes back to Not connected; ping brings her back.
+6. Add `192.168.100.99` (nothing there) and ping it. It ends with "No answer…".
+7. Stop bob's lab node, add bob (`192.168.100.11`) and ping: "No answer…". Start it again and ping: Connected.
+8. **Get help…**: the Peers section is there and masked, and the name "Alice" doesn't appear in the report, with or without masking.
+9. Disconnect. The tun device disappears (`ip link`). Only saved peers remain, all Not connected, with Ping disabled.
+10. Remove the config and import it again. The saved peers are still there.
 
 ### Relay scenario (later)
 With every node on 127.0.0.1, direct UDP can't be blocked per host. Testing relays needs separate network namespaces or containers: block direct UDP between alice and the dev host, enable `relay.use_relays` and `am_relay` on the lighthouse, and check that the peer row shows `relayed: true`.

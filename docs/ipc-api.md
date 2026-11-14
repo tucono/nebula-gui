@@ -28,7 +28,9 @@ All types live in `internal/api`. Errors use this shape:
 | `invalid_config` | 422 | The config failed validation or Nebula's dry run |
 | `not_configured` | 409 | No config has been imported |
 | `already_running` | 409 | Connect while Nebula is running |
-| `not_running` | 409 | Disconnect while Nebula is stopped |
+| `not_running` | 409 | Disconnect, ping or close while Nebula is stopped |
+| `not_found` | 404 | Close a tunnel that doesn't exist |
+| `rate_limited` | 429 | Too many pings in flight or per minute |
 | `ping_failed` | 500 | The ping could not be sent |
 | `internal` | 500 | Anything else, including Nebula failing to start |
 
@@ -49,6 +51,8 @@ The service sets `reason` when it knows why something failed, so the GUI can sho
 | `tun_unavailable` | `internal` | connect, `error_reason` | Nebula couldn't create the tun device |
 | `port_in_use` | `internal` | connect, `error_reason` | Nebula's UDP port is taken |
 | `nebula_stopped` | | `error_reason` | Nebula stopped on its own while running |
+| `not_in_overlay` | `bad_request` | `POST /v1/ping` | `vpn_ip` isn't inside this host's cert networks |
+| `own_address` | `bad_request` | `POST /v1/ping` | `vpn_ip` is this host's own overlay address |
 
 An `invalid_config` without a reason is any other dry-run failure, or a `pki.*` value that isn't inline PEM.
 
@@ -132,20 +136,32 @@ No body. Returns the new `status`.
   ]
 }
 ```
-The data comes from `Control.ListHostmapHosts`. Nebula has no per-peer byte or latency counters, so `last_ping_rtt_ms` is the only latency figure.
+The data comes from `Control.ListHostmapHosts`: established tunnels first, then pending handshakes. A host in both is listed once, as established. When Nebula isn't running, `peers` is empty (not an error).
+
+Nebula has no per-peer byte or latency counters, so `last_ping_rtt_ms` is the only latency figure: the average RTT of the last ping to that peer that got a reply. It's kept in memory and cleared on disconnect.
+
+Only peers with a tunnel are listed. The user's own names for peers ("saved peers") are kept by the GUI, not the service; see [m3-plan.md](m3-plan.md#saved-peers).
 
 ### `POST /v1/peers/{vpn_ip}/close`
-Closes the tunnel to that peer (`Control.CloseTunnel`).
+Closes the tunnel to that peer and tells the peer (`Control.CloseTunnel`). Returns `204 No Content`.
+
+Errors: `bad_request` if `vpn_ip` isn't an IP, `not_running`, and `not_found` if there's no tunnel to it.
 
 ### `POST /v1/ping`
 Request: `{ "vpn_ip": "192.168.100.5", "count": 3, "timeout_ms": 5000 }`
-`count` is 1–10 and `timeout_ms` is at most 15000. The service rejects IPs outside the overlay network's subnets.
+
+- `count` is 1–10 (default 3) and `timeout_ms` 100–15000 (default 5000).
+- `vpn_ip` must be inside one of this host's cert networks and not this host's own address: otherwise `bad_request` with reason `not_in_overlay` or `own_address`.
+- Nebula must be running (`not_running`).
+- At most 4 pings run at once, at most one per peer, and at most 60 start per minute; beyond that, `rate_limited`.
 
 Response:
 ```json
 { "vpn_ip": "192.168.100.5", "sent": 3, "received": 3, "rtt_min_ms": 21.0, "rtt_avg_ms": 23.4, "rtt_max_ms": 27.9 }
 ```
-The first ping often times out while the handshake runs, so the GUI should present it as "connecting…" rather than "failed".
+`rtt_*_ms` are omitted when `received` is 0. No replies is a normal result, not an error: `ping_failed` means the echo requests couldn't be sent at all.
+
+The first ping often times out while the handshake runs, so the GUI should present it as "connecting…" rather than "failed", check the tunnel state, and try once more (see [m3-plan.md](m3-plan.md#pinging)).
 
 ### `GET /v1/logs?since=<seq>`
 ```json

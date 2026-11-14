@@ -28,9 +28,13 @@ Detailed plan: [m2-plan.md](m2-plan.md).
 - [x] "Get help" troubleshooting report for AI assistants, with private network details masked
 
 ## M3: Peers and ping
+Detailed plan: [m3-plan.md](m3-plan.md).
+
 - [ ] `GET /v1/peers`, `POST /v1/peers/{ip}/close`
-- [ ] `POST /v1/ping` (pro-bing, limits, subnet check)
-- [ ] Peer table with auto-refresh, a ping dialog, and per-row ping and close actions
+- [ ] `POST /v1/ping` (pro-bing, limits, subnet check, last RTT per peer)
+- [ ] Peers tab with auto-refresh and a ⋯ menu per row: ping, copy IP, rename, close connection
+- [ ] Saved peers: the user's own names for peers, and **Add peer…** for peers without a tunnel yet
+- [ ] Peers in the troubleshooting report (masked; saved names never included)
 
 ## M4: Desktop integration and packaging
 - [ ] System tray menu, plus closing the window keeps the app running in the tray
