@@ -8,10 +8,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/tucono/nebula-gui/internal/api"
 )
@@ -107,6 +109,7 @@ func (f *importFlow) done(resp *api.ConfigPutResponse) {
 		m.in.NewConfig = true
 		msg = "You're still connected with the old config. Click Reconnect to use the new one."
 	}
+	m.remember(namesFromConfig(f.raw))
 	m.in.Action = nil // a problem from before the import is out of date
 	m.poller.Poke()   // configured, cert and overlay IP may have changed
 	dialog.ShowInformation("Config imported", msg, m.w)
@@ -121,6 +124,7 @@ func (f *importFlow) fail(err error) {
 	showProblemDialog(m.w, p, problemHandlers{
 		OnFix:    f.fix,
 		Supports: importFixes,
+		OnHelp:   m.openHelp,
 		Versions: m.versionsLine,
 	})
 }
@@ -256,4 +260,26 @@ func logError(err error) string {
 	default:
 		return errorDetails(err)
 	}
+}
+
+// namesFromConfig are the DNS names in a config's static_host_map, to
+// remember for masking reports. The service's config summary gives the
+// same names once it can be read; this covers a report made before then.
+func namesFromConfig(raw []byte) rememberedNames {
+	var c struct {
+		StaticHostMap map[string][]string `yaml:"static_host_map"`
+	}
+	var n rememberedNames
+	if yaml.Unmarshal(raw, &c) != nil {
+		return n
+	}
+	for _, addrs := range c.StaticHostMap {
+		for _, a := range addrs {
+			if h := hostOnly(a); h != "" && !isAddr(h) {
+				n.Hosts = append(n.Hosts, h)
+			}
+		}
+	}
+	sort.Strings(n.Hosts)
+	return n
 }

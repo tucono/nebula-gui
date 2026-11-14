@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	logNote       = "These are technical details for troubleshooting."
+	logNote       = "These are technical details for troubleshooting. Get help… makes a report to share."
 	logDetailHint = "Select a line to see all of it here."
 	// logDetailLines is how many lines of text the full-line pane shows
 	// before it scrolls.
@@ -32,11 +32,13 @@ type logView struct {
 	root     fyne.CanvasObject
 }
 
-func newLogView(model *logModel) *logView {
+// newLogView returns the Logs tab; onHelp runs its Get help… button.
+func newLogView(model *logModel, onHelp func()) *logView {
 	v := &logView{model: model}
 
 	note := widget.NewLabel(logNote)
 	note.Wrapping = fyne.TextWrapWord
+	help := widget.NewButtonWithIcon("Get help…", theme.HelpIcon(), onHelp)
 
 	v.follow = widget.NewCheck("Follow", func(on bool) {
 		if on {
@@ -82,7 +84,7 @@ func newLogView(model *logModel) *logView {
 	detailScroll.SetMinSize(fyne.NewSize(0, logDetailLines*lineH+2*theme.Padding()))
 
 	top := container.NewVBox(
-		note,
+		container.NewBorder(nil, nil, nil, container.NewCenter(help), note),
 		container.NewHBox(v.follow, v.warnOnly),
 		v.state,
 	)

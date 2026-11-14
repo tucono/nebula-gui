@@ -1,0 +1,46 @@
+# Nebula troubleshooting report
+Generated 2026-11-12T14:05:00-06:00 · nebula-gui 0.2.0 · service 0.2.0 · Nebula 1.12.0 · Linux amd64 (Ubuntu 24.04)
+Masking: on
+
+## Problem
+Couldn't create the network adapter [tun_unavailable]
+internal / tun_unavailable: Failed to get a tun/tap device: open /dev/net/tun: operation not permitted
+
+## State
+state=error · configured=yes · overlay OVERLAY-1/24
+error (tun_unavailable): Failed to get a tun/tap device: open /dev/net/tun: operation not permitted
+cert HOST-1, groups GROUP-1, GROUP-2, valid until 2027-11-11, CA valid until 2036-11-11 · listen port 4242
+Config: 1 lighthouse (HOST-2:4242), am_lighthouse=false, relays off, punchy on, listen port 4242,
+0 tun.routes, 0 unsafe_routes, firewall 3 inbound / 1 outbound rules
+
+## Recent app events
+```
+2026-11-12T14:02:58.001-06:00 app started os=linux/amd64 version=0.2.0
+2026-11-12T14:03:00.120-06:00 import done file=HOST-4.yml restart_required=false
+2026-11-12T14:03:20.002-06:00 connect clicked
+2026-11-12T14:03:20.310-06:00 connect failed error="internal / tun_unavailable: Failed to get a tun/tap device: open /dev/net/tun: operation not permitted" problem=tun_unavailable
+```
+
+## Service log (last 14 lines, JSON Lines)
+```jsonl
+{"time":"2026-11-12T14:00:00.000-06:00","level":"INFO","msg":"service started","os":"linux","pid":1234,"version":"0.2.0"}
+{"time":"2026-11-12T14:00:01.000-06:00","level":"DEBUG","msg":"request","duration":120000,"method":"GET","path":"/v1/status","status":200}
+{"time":"2026-11-12T14:03:20.100-06:00","level":"DEBUG","msg":"Trusted CA fingerprints","component":"nebula","fingerprints":["FP-2"]}
+{"time":"2026-11-12T14:03:20.101-06:00","level":"DEBUG","msg":"Client nebula certificate(s)","component":"nebula","cert":"HOST-1 [GROUP-1, GROUP-2] OVERLAY-1/24 until 2027-11-11 by FP-2"}
+{"time":"2026-11-12T14:03:20.102-06:00","level":"INFO","msg":"Firewall rule added","component":"nebula","firewallRule":{"caName":"","caSha":"","cidr":"","direction":"incoming","endPort":0,"groups":["GROUP-1"],"host":"any","localCidr":"","proto":0,"startPort":0}}
+{"time":"2026-11-12T14:03:20.103-06:00","level":"INFO","msg":"config: am_lighthouse=false, lighthouse.interval=60, punchy on","component":"nebula"}
+{"time":"2026-11-12T14:03:20.104-06:00","level":"INFO","msg":"Resolved HOST-2 to PUBLIC-1","component":"nebula","addr":"PUBLIC-1:4242","hostname":"HOST-2"}
+{"time":"2026-11-12T14:03:20.110-06:00","level":"INFO","msg":"Nebula interface is active","component":"nebula","build":"1.12.0","interface":"tun0","networks":["OVERLAY-1/24"],"udpAddr":"0.0.0.0:4242"}
+{"time":"2026-11-12T14:03:20.200-06:00","level":"INFO","msg":"Handshake message sent","component":"nebula","handshake":{"stage":1,"style":"ix_psk0"},"localIndex":4251706740,"udpAddrs":["PUBLIC-1:4242","LAN-1:4242","127.0.0.1:4242"],"vpnAddrs":["OVERLAY-2"]}
+{"time":"2026-11-12T14:03:20.300-06:00","level":"INFO","msg":"Handshake message received","component":"nebula","certName":"HOST-3","durationNs":1273553,"fingerprint":"FP-3","from":{"direct":"PUBLIC-1:4242"},"issuer":"FP-2","vpnAddrs":["OVERLAY-2"]}
+{"time":"2026-11-12T14:03:21.000-06:00","level":"INFO","msg":"Handshake message received","component":"nebula","certName":"HOST-4","issuer":"FP-2","udpAddrs":["PUBLIC-2:51820","[PUBLIC-3]:4242"],"vpnAddrs":["OVERLAY-3"]}
+{"time":"2026-11-12T14:03:22.000-06:00","level":"WARN","msg":"Failed to send handshake to PUBLIC-2:51820 via LINKLOCAL-1, HOST-4 may be offline","component":"nebula","linkLocal":"169.254.10.20","vpnAddr":"OVERLAY-3"}
+{"time":"2026-11-12T14:03:22.500-06:00","level":"INFO","msg":"Tunnel status","component":"nebula","cgnat":"LAN-2","lan":"LAN-3:4242","remote":"[PUBLIC-3]:4242","tunnelCheck":{"state":"alive"},"vpnAddr":"OVERLAY-3"}
+{"time":"2026-11-12T14:03:23.000-06:00","level":"ERROR","msg":"Failed to get a tun/tap device","component":"nebula","error":"open /dev/net/tun: operation not permitted"}
+```
+
+## Notes for the assistant
+- This is a Nebula overlay network client. nebula-guid is a privileged background service that runs Nebula; nebula-gui is the desktop app the user sees.
+- The user is not technical. Suggest one step at a time and say where to click.
+- Names and addresses are masked consistently: PUBLIC-1 is always the same address. PUBLIC is an internet address, LAN a local network address, OVERLAY an address on the Nebula network, HOST a host or certificate name, GROUP a certificate group and FP a certificate fingerprint.
+- Only the person who runs the network can issue new certificates or configs.

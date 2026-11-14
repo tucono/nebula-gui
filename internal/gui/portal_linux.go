@@ -26,6 +26,7 @@ const (
 	portalDest     = "org.freedesktop.portal.Desktop"
 	portalPath     = dbus.ObjectPath("/org/freedesktop/portal/desktop")
 	portalOpenCall = "org.freedesktop.portal.FileChooser.OpenFile"
+	portalSaveCall = "org.freedesktop.portal.FileChooser.SaveFile"
 	portalRequest  = "org.freedesktop.portal.Request"
 	portalResponse = portalRequest + ".Response"
 )
@@ -43,6 +44,7 @@ type portalRule struct {
 }
 
 // portalOpenFile shows the portal's file chooser and waits for the answer.
+// With req.Save set it asks where to save a file instead.
 //
 // It uses its own connection, so its signal subscription can't interfere
 // with anything else on the session bus, and it subscribes to the
@@ -77,7 +79,11 @@ func portalOpenFile(ctx context.Context, parent string, req openRequest) (string
 	}
 
 	var handle dbus.ObjectPath
-	call := conn.Object(portalDest, portalPath).CallWithContext(ctx, portalOpenCall, 0, parent, req.Title, portalOptions(req, token))
+	method := portalOpenCall
+	if req.Save {
+		method = portalSaveCall
+	}
+	call := conn.Object(portalDest, portalPath).CallWithContext(ctx, method, 0, parent, req.Title, portalOptions(req, token))
 	if err := call.Store(&handle); err != nil {
 		if ctx.Err() != nil {
 			// Closing while the portal was still opening the picker.
@@ -116,13 +122,16 @@ func closeRequest(conn *dbus.Conn, handle dbus.ObjectPath) {
 	_ = conn.Object(portalDest, handle).CallWithContext(ctx, portalRequest+".Close", 0).Err
 }
 
-// portalOptions builds OpenFile's options dictionary.
+// portalOptions builds the options dictionary of OpenFile and SaveFile.
 func portalOptions(req openRequest, token string) map[string]dbus.Variant {
 	opts := map[string]dbus.Variant{
 		"handle_token": dbus.MakeVariant(token),
 		"modal":        dbus.MakeVariant(true),
 	}
-	if f := portalFilterFor(req.Extensions); f != nil {
+	if req.Save && req.FileName != "" {
+		opts["current_name"] = dbus.MakeVariant(req.FileName)
+	}
+	if f := portalFilterFor(req.FilterName, req.Extensions); f != nil {
 		opts["filters"] = dbus.MakeVariant([]portalFilter{*f})
 		opts["current_filter"] = dbus.MakeVariant(*f)
 	}
@@ -134,12 +143,15 @@ func portalOptions(req openRequest, token string) map[string]dbus.Variant {
 }
 
 // portalFilterFor matches the extensions in either case, since portal
-// globs are case-sensitive.
-func portalFilterFor(exts []string) *portalFilter {
+// globs are case-sensitive. An empty name means "Config files".
+func portalFilterFor(name string, exts []string) *portalFilter {
 	if len(exts) == 0 {
 		return nil
 	}
-	f := &portalFilter{Name: "Config files (" + strings.Join(exts, ", ") + ")"}
+	if name == "" {
+		name = "Config files"
+	}
+	f := &portalFilter{Name: name + " (" + strings.Join(exts, ", ") + ")"}
 	for _, e := range exts {
 		f.Rules = append(f.Rules,
 			portalRule{Pattern: "*" + strings.ToLower(e)},

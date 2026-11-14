@@ -40,6 +40,9 @@ func Run(opts Options) {
 
 	a := app.NewWithID(appID)
 	m := newMainWindow(a, opts.Client, log, opts.AppVersion)
+	if p, err := defaultNameStorePath(); err == nil {
+		m.names = openNameStore(p)
+	}
 	m.start()
 	m.w.ShowAndRun()
 	m.close()

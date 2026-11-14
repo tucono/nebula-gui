@@ -25,7 +25,7 @@ type problemHandlers struct {
 	// Nil hides it.
 	OnDismiss func(*problem)
 	// OnHelp opens the troubleshooting report for the problem. Nil hides
-	// Get help… until the report exists (M2 step 9).
+	// Get help….
 	OnHelp func(*problem)
 	// Versions returns the app and service versions for Details.
 	Versions func() string

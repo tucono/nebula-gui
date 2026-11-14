@@ -79,4 +79,18 @@ func TestPortalOptions(t *testing.T) {
 	if _, ok := o["current_folder"]; ok {
 		t.Fatal("current_folder without StartDir")
 	}
+	if _, ok := o["current_name"]; ok {
+		t.Fatal("current_name when opening")
+	}
+	if fs[0].Name != "Config files (.yml)" {
+		t.Fatalf("filter name %q", fs[0].Name)
+	}
+
+	o = portalOptions(openRequest{Save: true, FileName: "nebula-report-2026-11-14.md", FilterName: "Markdown files", Extensions: []string{".md"}}, "tok")
+	if o["current_name"].Value() != "nebula-report-2026-11-14.md" {
+		t.Fatalf("current_name %v", o["current_name"])
+	}
+	if fs := o["filters"].Value().([]portalFilter); fs[0].Name != "Markdown files (.md)" {
+		t.Fatalf("filter name %q", fs[0].Name)
+	}
 }

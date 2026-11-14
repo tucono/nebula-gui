@@ -15,8 +15,16 @@ import (
 	"fyne.io/fyne/v2/storage"
 )
 
-// openRequest describes a file to ask the user for.
+// openRequest describes a file to ask the user for: one to open, or with
+// Save set, where to save one.
 type openRequest struct {
+	// Save asks for a file to write instead of one to read.
+	Save bool
+	// FileName is the name a save picker suggests.
+	FileName string
+	// FilterName describes Extensions in the picker; empty means
+	// "Config files".
+	FilterName string
 	// Title is the picker's title, where the picker shows one.
 	Title string
 	// Extensions limits the files offered, such as ".yml". Nil offers
@@ -87,6 +95,10 @@ func (m *mainWindow) pickFile(req openRequest, done func(path string)) {
 
 // fynePicker shows Fyne's picker, which is drawn inside the window.
 func (m *mainWindow) fynePicker(req openRequest, done func(path string)) {
+	if req.Save {
+		m.fyneSavePicker(req, done)
+		return
+	}
 	d := dialog.NewFileOpen(func(r fyne.URIReadCloser, err error) {
 		if err != nil {
 			m.log.Add("file picker failed", "error", err.Error())
@@ -100,6 +112,35 @@ func (m *mainWindow) fynePicker(req openRequest, done func(path string)) {
 		_ = r.Close()
 		done(path)
 	}, m.w)
+	if req.Extensions != nil {
+		d.SetFilter(storage.NewExtensionFileFilter(req.Extensions))
+	}
+	if req.StartDir != "" {
+		if l, err := storage.ListerForURI(storage.NewFileURI(req.StartDir)); err == nil {
+			d.SetLocation(l)
+		}
+	}
+	m.showPicker(d)
+}
+
+// fyneSavePicker is Fyne's picker for a file to save. Fyne creates the
+// file when the user picks it; the caller writes it again by path, with
+// its own permissions.
+func (m *mainWindow) fyneSavePicker(req openRequest, done func(path string)) {
+	d := dialog.NewFileSave(func(w fyne.URIWriteCloser, err error) {
+		if err != nil {
+			m.log.Add("file picker failed", "error", err.Error())
+			dialog.ShowError(err, m.w)
+			return
+		}
+		if w == nil {
+			return // cancelled
+		}
+		path := w.URI().Path()
+		_ = w.Close()
+		done(path)
+	}, m.w)
+	d.SetFileName(req.FileName)
 	if req.Extensions != nil {
 		d.SetFilter(storage.NewExtensionFileFilter(req.Extensions))
 	}

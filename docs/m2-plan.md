@@ -420,11 +420,16 @@ func inlinePKI(raw []byte, baseDir string, read func(string) ([]byte, error)) (s
 - Kept in memory (last 500 entries) and in a JSON Lines file under `os.UserConfigDir()/nebula-gui/logs/`, rotated at 1 MiB with one old file kept. So it survives a GUI restart, and covers the case where the service was never reachable.
 - Never records config contents, PEM, or full paths outside the file name. Home-directory paths are written as `~/…`.
 
-**Report** (`internal/gui/report.go`): `buildReport(reportInput) string`, a pure function. Its input is the current problem, the status, the `GET /v1/diagnostics` response (or the error from trying to get it), the GUI log, the versions and OS, and the masking setting. It produces the [format above](#report-format).
+**Report** (`internal/gui/report.go`): `buildReport(reportInput) (string, error)`, a pure function. The error is the final key-material check refusing the report. Its input is the current problem, the status, the `GET /v1/diagnostics` response (or the error from trying to get it), the GUI log, the versions and OS, and the masking setting. It produces the [format above](#report-format).
 
 **Masking** (`internal/gui/mask.go`): a `masker` with consistent placeholders, as described under [Masking](#masking). It's created once per report.
 
-**Dialog** (`internal/gui/help_dialog.go`): the [Get help dialog](#where-get-help-appears). **Save as file…** writes `nebula-report-<date>.md` with mode `0600`.
+**Dialog** (`internal/gui/help_dialog.go`): the [Get help dialog](#where-get-help-appears). **Save as file…** writes `nebula-report-<date>.md` with mode `0600`. On Linux it asks with the portal's `SaveFile`, like import does with `OpenFile`, and falls back to Fyne's save picker.
+
+- The dialog opens at once with "Collecting the details…" and fills in when `GET /v1/diagnostics` answers or fails.
+- The menu is File → Quit and Help → Get help…. Quit is set explicitly, because Fyne otherwise adds one to the first menu, which would put it under Help.
+- Remembered names live in `os.UserConfigDir()/nebula-gui/mask-names.json` (mode `0600`). They come from each status, from the diagnostics, and from the imported config's `static_host_map`. They're deleted when the config is removed.
+- A collected name followed by a file extension (`.yml`, `.conf`, …) still counts as a whole word, so a config called `alice-laptop.yml` doesn't give away the host's name.
 
 **Tests:**
 

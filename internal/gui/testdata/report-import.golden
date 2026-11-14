@@ -1,0 +1,33 @@
+# Nebula troubleshooting report
+Generated 2026-11-12T14:05:00-06:00 · nebula-gui 0.2.0 · service 0.2.0 · Nebula 1.12.0 · Linux amd64 (Ubuntu 24.04)
+Masking: on
+
+## Problem
+Your key file doesn't match your certificate [key_mismatch]
+invalid_config / key_mismatch: the key in pki.key doesn't match pki.cert
+
+## State
+state=stopped · configured=yes · overlay OVERLAY-1/24
+cert HOST-1, groups GROUP-1, GROUP-2, valid until 2027-11-11, CA valid until 2036-11-11 · listen port 4242
+Config: 1 lighthouse (HOST-2:4242), am_lighthouse=false, relays off, punchy on, listen port 4242,
+0 tun.routes, 0 unsafe_routes, firewall 3 inbound / 1 outbound rules
+
+## Recent app events
+```
+2026-11-12T14:02:58.001-06:00 app started os=linux/amd64 version=0.2.0
+2026-11-12T14:03:00.120-06:00 import done file=HOST-3.yml restart_required=false
+2026-11-12T14:04:00.000-06:00 import started file=HOST-3.yml
+2026-11-12T14:04:00.005-06:00 import failed error="invalid_config / key_mismatch: the key in pki.key doesn't match pki.cert" file=HOST-3.yml problem=key_mismatch
+```
+
+## Service log (last 2 lines, JSON Lines)
+```jsonl
+{"time":"2026-11-12T14:00:00.000-06:00","level":"INFO","msg":"service started","os":"linux","pid":1234,"version":"0.2.0"}
+{"time":"2026-11-12T14:00:01.000-06:00","level":"DEBUG","msg":"request","duration":120000,"method":"GET","path":"/v1/status","status":200}
+```
+
+## Notes for the assistant
+- This is a Nebula overlay network client. nebula-guid is a privileged background service that runs Nebula; nebula-gui is the desktop app the user sees.
+- The user is not technical. Suggest one step at a time and say where to click.
+- Names and addresses are masked consistently: PUBLIC-1 is always the same address. PUBLIC is an internet address, LAN a local network address, OVERLAY an address on the Nebula network, HOST a host or certificate name, GROUP a certificate group and FP a certificate fingerprint.
+- Only the person who runs the network can issue new certificates or configs.

@@ -26,6 +26,7 @@ type actionClient interface {
 	Disconnect(ctx context.Context) (*api.StatusResponse, error)
 	PutConfig(ctx context.Context, yaml string) (*api.ConfigPutResponse, error)
 	DeleteConfig(ctx context.Context) (*api.StatusResponse, error)
+	Diagnostics(ctx context.Context, lines int) (*api.DiagnosticsResponse, error)
 	logsClient
 	Addr() string
 }
@@ -35,13 +36,15 @@ type actionClient interface {
 // the service log. Its fields are only touched on the UI
 // goroutine; the poller and the actions hand results over with fyne.Do.
 type mainWindow struct {
-	a          fyne.App
-	w          fyne.Window
-	c          actionClient
-	log        *appLog
-	gate       *statusGate
-	poller     *poller
-	logPoller  *logPoller
+	a         fyne.App
+	w         fyne.Window
+	c         actionClient
+	log       *appLog
+	gate      *statusGate
+	poller    *poller
+	logPoller *logPoller
+	// names are remembered for masking troubleshooting reports.
+	names      *nameStore
 	appVersion string
 	// spawn runs an action's call off the UI goroutine. Tests replace it
 	// to run the call in place.
@@ -69,6 +72,8 @@ type mainWindow struct {
 	footer   *widget.RichText
 	tabs     *container.AppTabs
 	logs     *logView
+	// help is the open Get help dialog, or nil.
+	help *helpDialog
 
 	// picker is the open Fyne file picker, kept the size of the window.
 	picker *dialog.FileDialog
@@ -95,6 +100,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		c:          c,
 		log:        log,
 		gate:       &statusGate{},
+		names:      openNameStore(""),
 		appVersion: appVersion,
 		spawn:      func(f func()) { go f() },
 		readFile:   readCapped,
@@ -104,12 +110,13 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.poller = newPoller(c, log, m.gate)
 	m.logPoller = newLogPoller(c)
-	m.logs = newLogView(newLogModel())
+	m.logs = newLogView(newLogModel(), func() { m.openHelp(m.bannerProblem()) })
 
 	m.banner = newProblemView(problemHandlers{
 		OnFix:     m.fix,
 		Supports:  supportedFix,
 		OnDismiss: m.dismiss,
+		OnHelp:    m.openHelp,
 		Versions:  m.versionsLine,
 	})
 	m.waiting = widget.NewLabel("Contacting the background service…")
@@ -163,10 +170,34 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 	m.tabs.OnSelected = func(*container.TabItem) {
 		m.logPoller.SetFast(m.logsShowing())
 	}
-	m.w.SetContent(container.New(&resizeWatcher{onResize: func(fyne.Size) { m.fitPicker() }}, m.tabs))
+	m.w.SetMainMenu(m.mainMenu())
+	m.w.SetContent(container.New(&resizeWatcher{onResize: func(fyne.Size) {
+		m.fitPicker()
+		m.fitHelp()
+	}}, m.tabs))
 	m.w.Resize(fyne.NewSize(520, 420))
 	m.render()
 	return m
+}
+
+// mainMenu is File → Quit and Help → Get help…, for when something feels
+// wrong without a problem being shown. Quit is set explicitly: Fyne adds
+// one to the first menu otherwise, which would put it under Help.
+func (m *mainWindow) mainMenu() *fyne.MainMenu {
+	quit := fyne.NewMenuItem("Quit", func() { m.a.Quit() })
+	quit.IsQuit = true
+	return fyne.NewMainMenu(
+		fyne.NewMenu("File", quit),
+		fyne.NewMenu("Help", fyne.NewMenuItem("Get help…", func() { m.openHelp(m.bannerProblem()) })),
+	)
+}
+
+// remember keeps names for masking reports. Saving can fail, for example
+// on a full disk; the report then masks with what it has.
+func (m *mainWindow) remember(n rememberedNames) {
+	if err := m.names.Remember(n); err != nil {
+		m.log.Add("couldn't save names for masking", "error", err.Error())
+	}
 }
 
 // now returns the input with the current time, for describeStatus.
@@ -231,6 +262,7 @@ func (m *mainWindow) applyPoll(r pollResult) {
 
 func (m *mainWindow) applyStatus(st *api.StatusResponse) {
 	m.in.Err, m.in.Status = nil, st
+	m.remember(namesFromStatus(st))
 	if st.State == api.StateRunning || st.State == api.StateStarting {
 		m.in.Action = nil // the problem it showed is over
 	}
@@ -453,8 +485,13 @@ func (m *mainWindow) act(a action) {
 				m.poller.Poke() // the status may have changed too
 			} else {
 				m.log.Add(a.String()+" done", "state", string(st.State))
-				if a == actReconnect {
+				switch a {
+				case actReconnect:
 					m.in.NewConfig = false // running with the new config now
+				case actRemoveConfig:
+					if err := m.names.Clear(); err != nil {
+						m.log.Add("couldn't forget names for masking", "error", err.Error())
+					}
 				}
 				if m.gate.Accept(seq) {
 					m.applyStatus(st)
