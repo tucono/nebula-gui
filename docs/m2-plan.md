@@ -409,6 +409,8 @@ func inlinePKI(raw []byte, baseDir string, read func(string) ([]byte, error)) (s
   - A "Follow" checkbox scrolls to the bottom when new lines arrive. Fyne doesn't make it reliable to detect that the user scrolled away, so the checkbox makes that choice explicit.
   - **Get help…** replaces the earlier "Copy all" idea: the report contains the same lines, plus context and masking.
   - Optional: a level filter (warn+ / all).
+  - Rows are cut off at the window's edge, so selecting one shows the whole line, selectable, in a pane of fixed height below the list.
+  - The window gets two tabs, **Status** and **Logs**. The Status tab keeps its scroll container, and the Logs tab's list scrolls by itself.
 
 ### 9. GUI log, troubleshooting report and masking
 

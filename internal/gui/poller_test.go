@@ -28,6 +28,7 @@ type fakeService struct {
 	put       []string
 	unconfig  bool
 	calls     []string
+	logLines  []api.LogLine // line i has seq i
 }
 
 func newFakeService() *fakeService {

@@ -26,11 +26,13 @@ type actionClient interface {
 	Disconnect(ctx context.Context) (*api.StatusResponse, error)
 	PutConfig(ctx context.Context, yaml string) (*api.ConfigPutResponse, error)
 	DeleteConfig(ctx context.Context) (*api.StatusResponse, error)
+	logsClient
 	Addr() string
 }
 
-// mainWindow is the app's window: a problem banner or the status header,
-// then the versions in small print. Its fields are only touched on the UI
+// mainWindow is the app's window. The Status tab has a problem banner or
+// the status header, then the versions in small print; the Logs tab has
+// the service log. Its fields are only touched on the UI
 // goroutine; the poller and the actions hand results over with fyne.Do.
 type mainWindow struct {
 	a          fyne.App
@@ -39,6 +41,7 @@ type mainWindow struct {
 	log        *appLog
 	gate       *statusGate
 	poller     *poller
+	logPoller  *logPoller
 	appVersion string
 	// spawn runs an action's call off the UI goroutine. Tests replace it
 	// to run the call in place.
@@ -64,6 +67,8 @@ type mainWindow struct {
 	importB  *widget.Button
 	removeB  *widget.Button
 	footer   *widget.RichText
+	tabs     *container.AppTabs
+	logs     *logView
 
 	// picker is the open Fyne file picker, kept the size of the window.
 	picker *dialog.FileDialog
@@ -98,6 +103,8 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 	}
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.poller = newPoller(c, log, m.gate)
+	m.logPoller = newLogPoller(c)
+	m.logs = newLogView(newLogModel())
 
 	m.banner = newProblemView(problemHandlers{
 		OnFix:     m.fix,
@@ -149,7 +156,14 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		widget.NewSeparator(),
 		m.footer,
 	)))
-	m.w.SetContent(container.New(&resizeWatcher{onResize: func(fyne.Size) { m.fitPicker() }}, scroll))
+	m.tabs = container.NewAppTabs(
+		container.NewTabItem("Status", scroll),
+		container.NewTabItem("Logs", m.logs.root),
+	)
+	m.tabs.OnSelected = func(*container.TabItem) {
+		m.logPoller.SetFast(m.logsShowing())
+	}
+	m.w.SetContent(container.New(&resizeWatcher{onResize: func(fyne.Size) { m.fitPicker() }}, m.tabs))
 	m.w.Resize(fyne.NewSize(520, 420))
 	m.render()
 	return m
@@ -167,6 +181,14 @@ func (m *mainWindow) start() {
 	go m.poller.run(m.ctx, func(r pollResult) {
 		fyne.Do(func() { m.applyPoll(r) })
 	})
+	go m.logPoller.run(m.ctx, func(u logUpdate) {
+		fyne.Do(func() { m.logs.apply(u) })
+	})
+}
+
+// logsShowing reports whether the Logs tab is the selected one.
+func (m *mainWindow) logsShowing() bool {
+	return m.tabs.Selected() != nil && m.tabs.Selected().Content == m.logs.root
 }
 
 // closeWait is how long close waits for a native picker to be closed.
@@ -364,6 +386,7 @@ func (m *mainWindow) fix(f fixAction) {
 	switch f.Kind {
 	case fixRetry:
 		m.poller.Poke()
+		m.logPoller.Poke()
 	case fixOpenDownloads:
 		openDownloads(m.a)
 	case fixConnect:
