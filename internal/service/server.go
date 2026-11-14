@@ -57,6 +57,9 @@ type Server struct {
 	logs    *LogBuffer
 	logFile *LogFile
 
+	pinger    pinger
+	pingLimit *pingLimiter
+
 	// instanceID is random per Server, so clients can tell that the
 	// service restarted.
 	instanceID string
@@ -75,6 +78,9 @@ func New(opts Options) (*Server, error) {
 		engine:  opts.Engine,
 		logs:    opts.Logs,
 		logFile: opts.LogFile,
+
+		pinger:    proBingPinger{},
+		pingLimit: newPingLimiter(),
 
 		instanceID: rand.Text(),
 		osVersion:  osVersion(),
@@ -107,6 +113,7 @@ func New(opts Options) (*Server, error) {
 	s.mux.HandleFunc("GET /v1/diagnostics", s.handleDiagnostics)
 	s.mux.HandleFunc("GET /v1/peers", s.handlePeers)
 	s.mux.HandleFunc("POST /v1/peers/{vpn_ip}/close", s.handleClosePeer)
+	s.mux.HandleFunc("POST /v1/ping", s.handlePing)
 	return s, nil
 }
 
@@ -292,6 +299,8 @@ func (s *Server) handleClosePeer(w http.ResponseWriter, r *http.Request) {
 func (s *Server) writeErr(w http.ResponseWriter, err error) {
 	var ic *errInvalidConfig
 	var se *errStart
+	var br *errBadRequest
+	var pf *errPingFailed
 	switch {
 	case errors.As(err, &ic):
 		s.writeReasonError(w, api.CodeInvalidConfig, ic.reason, ic.msg)
@@ -303,6 +312,12 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 		s.writeError(w, api.CodeNotRunning, err.Error())
 	case errors.Is(err, nebulactl.ErrNoTunnel):
 		s.writeError(w, api.CodeNotFound, err.Error())
+	case errors.As(err, &br):
+		s.writeReasonError(w, api.CodeBadRequest, br.reason, br.msg)
+	case errors.Is(err, errRateLimited):
+		s.writeError(w, api.CodeRateLimited, err.Error())
+	case errors.As(err, &pf):
+		s.writeError(w, api.CodePingFailed, pf.Error())
 	case errors.As(err, &se):
 		s.writeReasonError(w, api.CodeInternal, se.reason, se.Error())
 	default:
@@ -329,6 +344,8 @@ func httpStatus(code api.ErrorCode) int {
 		return http.StatusConflict
 	case api.CodeNotFound:
 		return http.StatusNotFound
+	case api.CodeRateLimited:
+		return http.StatusTooManyRequests
 	default:
 		return http.StatusInternalServerError
 	}

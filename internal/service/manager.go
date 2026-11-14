@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -58,6 +59,9 @@ type manager struct {
 	configured bool
 	stored     *ConfigInfo // the stored config; nil if none or unreadable
 	running    *ConfigInfo // the config Nebula was started with
+	// rtt is the average RTT in ms of the last answered ping per overlay
+	// address. It is cleared whenever Nebula stops.
+	rtt map[netip.Addr]float64
 }
 
 func newManager(engine Engine, store *Store, log *slog.Logger) (*manager, error) {
@@ -224,7 +228,7 @@ func (m *manager) watch(inst Instance) {
 		msg = fmt.Sprintf("%s: %v", msg, err)
 	}
 	m.state, m.lastErr, m.lastReason = api.StateError, msg, api.ReasonNebulaStopped
-	m.inst, m.running, m.startedAt = nil, nil, time.Time{}
+	m.inst, m.running, m.startedAt, m.rtt = nil, nil, time.Time{}, nil
 	m.log.Error(msg)
 }
 
@@ -269,7 +273,7 @@ func (m *manager) stopLocked() {
 	inst.Stop()
 
 	m.mu.Lock()
-	m.state, m.inst, m.running, m.startedAt = api.StateStopped, nil, nil, time.Time{}
+	m.state, m.inst, m.running, m.startedAt, m.rtt = api.StateStopped, nil, nil, time.Time{}, nil
 	m.mu.Unlock()
 	m.log.Info("nebula stopped")
 }

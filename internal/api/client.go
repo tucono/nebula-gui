@@ -146,6 +146,16 @@ func (c *Client) ClosePeer(ctx context.Context, vpnIP string) error {
 	return c.do(ctx, http.MethodPost, "/v1/peers/"+url.PathEscape(vpnIP)+"/close", nil, nil)
 }
 
+// Ping calls POST /v1/ping. It blocks until the ping finishes, at most
+// req.TimeoutMs (15 s) plus the round trip.
+func (c *Client) Ping(ctx context.Context, req PingRequest) (*PingResponse, error) {
+	var r PingResponse
+	if err := c.do(ctx, http.MethodPost, "/v1/ping", req, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 func (c *Client) statusCall(ctx context.Context, method, path string) (*StatusResponse, error) {
 	var s StatusResponse
 	if err := c.do(ctx, method, path, nil, &s); err != nil {

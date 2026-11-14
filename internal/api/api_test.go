@@ -170,3 +170,33 @@ func TestClientClosePeer(t *testing.T) {
 		t.Fatalf("ClosePeer without tunnel: %v", err)
 	}
 }
+
+func TestClientPing(t *testing.T) {
+	var got PingRequest
+	c := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/ping" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		if got.VpnIP == "192.168.100.11" {
+			_, _ = w.Write([]byte(`{"vpn_ip":"192.168.100.11","sent":3,"received":0}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"vpn_ip":"192.168.100.10","sent":3,"received":3,"rtt_min_ms":21,"rtt_avg_ms":23.4,"rtt_max_ms":27.9}`))
+	}))
+	r, err := c.Ping(context.Background(), PingRequest{VpnIP: "192.168.100.10"})
+	if err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if got.Count != 0 || got.TimeoutMs != 0 {
+		t.Fatalf("defaults sent explicitly: %+v", got)
+	}
+	if r.Received != 3 || r.RTTAvgMs == nil || *r.RTTAvgMs != 23.4 {
+		t.Fatalf("ping = %+v", r)
+	}
+	r, err = c.Ping(context.Background(), PingRequest{VpnIP: "192.168.100.11", Count: 1})
+	if err != nil || r.Received != 0 || r.RTTAvgMs != nil || got.Count != 1 {
+		t.Fatalf("unanswered ping = %+v, %v (sent %+v)", r, err, got)
+	}
+}

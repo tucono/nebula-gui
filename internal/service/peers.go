@@ -32,7 +32,14 @@ func (m *manager) peers() []api.Peer {
 				continue
 			}
 			seen[h.VpnAddrs[0]] = true
-			out = append(out, toPeer(h, state))
+			p := toPeer(h, state)
+			for _, a := range h.VpnAddrs {
+				if ms, ok := m.rtt[a]; ok {
+					p.LastPingRTTMs = &ms
+					break
+				}
+			}
+			out = append(out, p)
 		}
 	}
 	add(m.inst.Hosts(false), api.PeerEstablished)

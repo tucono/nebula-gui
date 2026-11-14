@@ -77,6 +77,7 @@ const (
 	CodeAlreadyRunning ErrorCode = "already_running"
 	CodeNotRunning     ErrorCode = "not_running"
 	CodeNotFound       ErrorCode = "not_found"
+	CodeRateLimited    ErrorCode = "rate_limited"
 	CodePingFailed     ErrorCode = "ping_failed"
 	CodeInternal       ErrorCode = "internal"
 )
@@ -103,6 +104,12 @@ const (
 	ReasonTunUnavailable Reason = "tun_unavailable"
 	ReasonPortInUse      Reason = "port_in_use"
 	ReasonNebulaStopped  Reason = "nebula_stopped"
+)
+
+// Reasons for bad_request from POST /v1/ping.
+const (
+	ReasonNotInOverlay Reason = "not_in_overlay"
+	ReasonOwnAddress   Reason = "own_address"
 )
 
 // ErrorBody is the JSON envelope for every error response.
@@ -178,6 +185,34 @@ type Peer struct {
 // PeersResponse is returned by GET /v1/peers.
 type PeersResponse struct {
 	Peers []Peer `json:"peers"`
+}
+
+// Ping limits and defaults. See docs/ipc-api.md.
+const (
+	PingDefaultCount     = 3
+	PingMaxCount         = 10
+	PingDefaultTimeoutMs = 5000
+	PingMinTimeoutMs     = 100
+	PingMaxTimeoutMs     = 15000
+)
+
+// PingRequest is the body of POST /v1/ping. Zero Count or TimeoutMs means
+// the default.
+type PingRequest struct {
+	VpnIP     string `json:"vpn_ip"`
+	Count     int    `json:"count,omitempty"`
+	TimeoutMs int    `json:"timeout_ms,omitempty"`
+}
+
+// PingResponse is returned by POST /v1/ping. No replies is a normal result;
+// the RTT fields are nil then.
+type PingResponse struct {
+	VpnIP    string   `json:"vpn_ip"`
+	Sent     int      `json:"sent"`
+	Received int      `json:"received"`
+	RTTMinMs *float64 `json:"rtt_min_ms,omitempty"`
+	RTTAvgMs *float64 `json:"rtt_avg_ms,omitempty"`
+	RTTMaxMs *float64 `json:"rtt_max_ms,omitempty"`
 }
 
 // LogsResponse is returned by GET /v1/logs.
