@@ -28,7 +28,6 @@ const (
 // Texts of ping results. The Peers tab puts the peer's name in front.
 const (
 	pingTextConnecting = "Connecting…"
-	pingTextStill      = "Still connecting. Try again in a moment."
 	pingTextFirewall   = "Connected, but it didn't answer. Its firewall may not allow ping."
 	pingTextNoAnswer   = "No answer. It may be switched off or not connected to Nebula, or the address may be wrong."
 	pingTextBusy       = "Too many pings at once. Try again in a moment."
@@ -59,7 +58,10 @@ type pingView struct {
 // describePing judges a ping by its replies and by the peer's tunnel
 // before and after it (nil when there was none). A retry passes the
 // tunnel after the first ping as before, so it never asks for a second
-// retry.
+// retry. A tunnel still pending after a ping without replies counts as
+// no answer: Nebula keeps a pending tunnel for an address nobody has
+// while it asks the lighthouse, and a real peer finishes its handshake
+// well within a ping's timeout.
 func describePing(before, after *api.Peer, res *api.PingResponse, err error) pingView {
 	if err != nil {
 		if api.ErrorCodeOf(err) == api.CodeRateLimited {
@@ -83,8 +85,6 @@ func describePing(before, after *api.Peer, res *api.PingResponse, err error) pin
 		return pingView{Kind: pingWaiting, Text: pingTextConnecting, Retry: true}
 	case after != nil && after.State == api.PeerEstablished:
 		return pingView{Kind: pingNoAnswer, Text: pingTextFirewall}
-	case after != nil:
-		return pingView{Kind: pingNoAnswer, Text: pingTextStill}
 	default:
 		return pingView{Kind: pingNoAnswer, Text: pingTextNoAnswer}
 	}

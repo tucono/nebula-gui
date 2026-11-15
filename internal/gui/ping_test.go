@@ -41,7 +41,7 @@ func TestDescribePing(t *testing.T) {
 		{"opened a tunnel", nil, &est, replies(0), nil, pingView{Kind: pingWaiting, Text: pingTextConnecting, Retry: true}, ""},
 		{"retry, connected", &pend, &est, replies(0), nil, pingView{Kind: pingNoAnswer, Text: pingTextFirewall}, ""},
 		{"connected all along", &est, &est, replies(0), nil, pingView{Kind: pingNoAnswer, Text: pingTextFirewall}, ""},
-		{"retry, still pending", &pend, &pend, replies(0), nil, pingView{Kind: pingNoAnswer, Text: pingTextStill}, ""},
+		{"retry, still pending", &pend, &pend, replies(0), nil, pingView{Kind: pingNoAnswer, Text: pingTextNoAnswer}, ""},
 		{"no tunnel", nil, nil, replies(0), nil, pingView{Kind: pingNoAnswer, Text: pingTextNoAnswer}, ""},
 		{"tunnel went away", &est, nil, replies(0), nil, pingView{Kind: pingNoAnswer, Text: pingTextNoAnswer}, ""},
 		{"rate limited", nil, nil, nil, &api.Error{Code: api.CodeRateLimited, Message: "too many"}, pingView{Kind: pingWaiting, Text: pingTextBusy}, ""},
@@ -149,6 +149,29 @@ func TestPingOpensTunnelAndRetries(t *testing.T) {
 		t.Errorf("Bob %q", got)
 	}
 	noNamesInLog(t, m, "Bob's PC")
+}
+
+// TestPingNobodyThere is an address nobody has: Nebula keeps a pending
+// tunnel while it asks the lighthouse, so the first ping is retried, and
+// the retry ends in No answer.
+func TestPingNobodyThere(t *testing.T) {
+	m, svc, _ := peersWindow(t)
+	svc.takeCalls()
+	svc.set(func(f *fakeService) {
+		f.ping = func(f *fakeService, ip string) (*api.PingResponse, error) {
+			if findPeer(f.peers, netip.MustParseAddr(ip)) == nil {
+				f.peers = append(f.peers, apiPeer(api.PeerPending, "", ip))
+			}
+			return &api.PingResponse{VpnIP: ip, Sent: 3}, nil
+		}
+	})
+	m.pingPeer(netip.MustParseAddr("192.168.100.99"), "Ghost")
+	if got := pings(svc.takeCalls()); len(got) != 2 {
+		t.Errorf("pings %v, want a retry", got)
+	}
+	if m.peers.result.Text != "Ghost: "+pingTextNoAnswer {
+		t.Errorf("result %q", m.peers.result.Text)
+	}
 }
 
 func TestPingNoAnswer(t *testing.T) {
