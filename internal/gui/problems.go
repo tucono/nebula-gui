@@ -71,6 +71,13 @@ const (
 	probNebulaStopped  problemID = "nebula_stopped"
 	probNewConfigSaved problemID = "new_config_saved"
 	probConnectFailed  problemID = "connect_failed"
+
+	// Pinging a peer.
+	probPingBusy       problemID = "ping_busy"
+	probNotInOverlay   problemID = "not_in_overlay"
+	probOwnAddress     problemID = "own_address"
+	probPingNotRunning problemID = "ping_not_running"
+	probPingFailed     problemID = "ping_failed"
 )
 
 // fixAction is a button that fixes the problem directly. The window decides
@@ -386,6 +393,58 @@ func connectFailed() *problem {
 	}
 }
 
+// --- Pinging a peer ---
+
+// pingBusy is rate_limited. The Peers tab shows it in the row; the entry
+// exists for the GUI log and the troubleshooting report.
+func pingBusy() *problem {
+	return &problem{
+		ID:      probPingBusy,
+		Info:    true,
+		Title:   "Too many pings at once",
+		Explain: "The app limits how many pings run at the same time.",
+		Steps:   []string{"Wait a moment, then ping again."},
+	}
+}
+
+// notInOverlay and ownAddress shouldn't happen: the app checks addresses
+// before pinging. The service is the authority, though.
+func notInOverlay() *problem {
+	return &problem{
+		ID:      probNotInOverlay,
+		Title:   "That address isn't on your Nebula network",
+		Explain: "Only computers on your Nebula network can be pinged.",
+		Steps:   []string{"Check the address with " + contact + "."},
+	}
+}
+
+func ownAddress() *problem {
+	return &problem{
+		ID:      probOwnAddress,
+		Title:   "That's this computer",
+		Explain: "The address belongs to this computer, so there's nothing to ping.",
+		Steps:   []string{"Check the address in your list, and remove it if it's this computer's."},
+	}
+}
+
+func pingNotRunning() *problem {
+	return &problem{
+		ID:      probPingNotRunning,
+		Title:   "You're not connected",
+		Explain: "Nebula stopped before the ping could start.",
+		Steps:   []string{"Connect, then ping again."},
+	}
+}
+
+func pingFailed() *problem {
+	return &problem{
+		ID:      probPingFailed,
+		Title:   "Couldn't ping",
+		Explain: "Something went wrong while sending the ping.",
+		Steps:   []string{"Try again.", "If it fails again, click Get help…."},
+	}
+}
+
 // --- Choosing an entry ---
 
 // op is what the user was doing when an error came back. The same service
@@ -396,6 +455,7 @@ const (
 	opOther op = iota
 	opImport
 	opConnect
+	opPing
 )
 
 // problemContext is what the catalogue needs to fill in names and dates.
@@ -462,6 +522,10 @@ func fromAPIError(e *api.Error, pc problemContext) *problem {
 		return portInUse()
 	case api.ReasonNebulaStopped:
 		return nebulaStopped()
+	case api.ReasonNotInOverlay:
+		return notInOverlay()
+	case api.ReasonOwnAddress:
+		return ownAddress()
 	}
 	switch {
 	case e.Code == api.CodeInvalidConfig:
@@ -472,6 +536,12 @@ func fromAPIError(e *api.Error, pc problemContext) *problem {
 		return configTooLarge()
 	case pc.Op == opImport:
 		return configProblem()
+	case e.Code == api.CodeRateLimited:
+		return pingBusy()
+	case pc.Op == opPing && e.Code == api.CodeNotRunning:
+		return pingNotRunning()
+	case pc.Op == opPing, e.Code == api.CodePingFailed:
+		return pingFailed()
 	default:
 		return connectFailed()
 	}

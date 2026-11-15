@@ -33,6 +33,8 @@ type fakeService struct {
 	peers     []api.Peer
 	peersErr  error
 	closeErr  error
+	// ping answers Ping under the lock; nil uses fakePing.
+	ping func(f *fakeService, vpnIP string) (*api.PingResponse, error)
 }
 
 func newFakeService() *fakeService {
@@ -144,6 +146,30 @@ func (f *fakeService) ClosePeer(_ context.Context, vpnIP string) error {
 		}
 	}
 	return &api.Error{Code: api.CodeNotFound, Message: "no tunnel"}
+}
+
+func (f *fakeService) Ping(_ context.Context, req api.PingRequest) (*api.PingResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "ping "+req.VpnIP)
+	if f.state != api.StateRunning {
+		return nil, &api.Error{Code: api.CodeNotRunning, Message: "nebula is not running"}
+	}
+	if f.ping != nil {
+		return f.ping(f, req.VpnIP)
+	}
+	return fakePing(f, req.VpnIP)
+}
+
+// fakePing answers for peers with a tunnel and not for others.
+func fakePing(f *fakeService, vpnIP string) (*api.PingResponse, error) {
+	for _, p := range f.peers {
+		if slices.Contains(p.VpnIPs, vpnIP) {
+			avg := 12.0
+			return &api.PingResponse{VpnIP: vpnIP, Sent: 3, Received: 3, RTTAvgMs: &avg}, nil
+		}
+	}
+	return &api.PingResponse{VpnIP: vpnIP, Sent: 3}, nil
 }
 
 func (f *fakeService) Addr() string { return "/run/user/1000/nebula-guid.sock" }

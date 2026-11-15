@@ -38,6 +38,7 @@ func catalogue() []*problem {
 		wrongCA(), keyEncrypted("laptop.key"), keyEncrypted(""),
 		configTooLarge(), configProblem(),
 		portInUse(), nebulaStopped(), newConfigSaved(), connectFailed(),
+		pingBusy(), notInOverlay(), ownAddress(), pingNotRunning(), pingFailed(),
 	)
 }
 
@@ -48,6 +49,7 @@ var allIDs = []problemID{
 	probSSHDEnabled, probCertExpired, probCAExpired, probKeyMismatch, probWrongCA, probKeyEncrypted,
 	probConfigTooLarge, probConfigProblem,
 	probTunUnavailable, probPortInUse, probNebulaStopped, probNewConfigSaved, probConnectFailed,
+	probPingBusy, probNotInOverlay, probOwnAddress, probPingNotRunning, probPingFailed,
 }
 
 func TestCatalogueIDs(t *testing.T) {
@@ -184,6 +186,13 @@ func TestProblemForAPIError(t *testing.T) {
 		{api.CodeInternal, "", "", opConnect, probConnectFailed},
 		{api.CodeInternal, "something_new", "", opConnect, probConnectFailed},
 		{api.CodeNotConfigured, "", "", opConnect, probNoConfig},
+		{api.CodeRateLimited, "", "", opPing, probPingBusy},
+		{api.CodeBadRequest, api.ReasonNotInOverlay, "", opPing, probNotInOverlay},
+		{api.CodeBadRequest, api.ReasonOwnAddress, "", opPing, probOwnAddress},
+		{api.CodeNotRunning, "", "", opPing, probPingNotRunning},
+		{api.CodePingFailed, "", "", opPing, probPingFailed},
+		{api.CodeInternal, "", "", opPing, probPingFailed},
+		{api.CodeBadRequest, "", "count out of range", opPing, probPingFailed},
 	} {
 		e := &api.Error{Code: tc.code, Reason: tc.reason, Message: tc.msg}
 		// The client wraps nothing around *api.Error today, but a caller may.

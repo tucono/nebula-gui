@@ -27,6 +27,7 @@ type actionClient interface {
 	PutConfig(ctx context.Context, yaml string) (*api.ConfigPutResponse, error)
 	DeleteConfig(ctx context.Context) (*api.StatusResponse, error)
 	ClosePeer(ctx context.Context, vpnIP string) error
+	Ping(ctx context.Context, req api.PingRequest) (*api.PingResponse, error)
 	Diagnostics(ctx context.Context, lines int) (*api.DiagnosticsResponse, error)
 	logsClient
 	Addr() string
@@ -78,6 +79,8 @@ type mainWindow struct {
 	peers    *peersView
 	// help is the open Get help dialog, or nil.
 	help *helpDialog
+	// addPeerD is the open Add peer dialog, or nil.
+	addPeerD *addPeerDialog
 
 	// picker is the open Fyne file picker, kept the size of the window.
 	picker *dialog.FileDialog
@@ -116,7 +119,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 	m.poller = newPoller(c, log, m.gate)
 	m.logPoller = newLogPoller(c)
 	m.logs = newLogView(newLogModel(), func() { m.openHelp(m.bannerProblem()) })
-	m.peers = newPeersView(m.showPeerMenu)
+	m.peers = newPeersView(m.showPeerMenu, m.showAddPeer)
 
 	m.banner = newProblemView(problemHandlers{
 		OnFix:     m.fix,

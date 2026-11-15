@@ -142,8 +142,8 @@ func TestPeersTab(t *testing.T) {
 func TestPeerMenu(t *testing.T) {
 	m, _, _ := peersWindow(t)
 	for title, want := range map[string][]string{
-		"alice":    {"Copy IP", "Give it a name…", "--", "Close connection"},
-		"Bob's PC": {"Copy IP", "Rename…", "Remove from list"},
+		"alice":    {"Ping", "Copy IP", "Give it a name…", "--", "Close connection"},
+		"Bob's PC": {"Ping", "Copy IP", "Rename…", "Remove from list"},
 	} {
 		if got := menuLabels(m.peerMenu(rowFor(t, m, title))); !slices.Equal(got, want) {
 			t.Errorf("%s: %v, want %v", title, got, want)

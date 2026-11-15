@@ -109,20 +109,30 @@ func (it *peerRowItem) CreateRenderer() fyne.WidgetRenderer {
 type peersView struct {
 	rows    []peerRow
 	note    *widget.Label
+	addB    *widget.Button
 	list    *widget.List
 	empty   *fyne.Container
 	root    fyne.CanvasObject
 	onMore  func(r peerRow, from fyne.CanvasObject)
 	copied  netip.Addr // the row that says "Copied", if any
 	copySeq int
+	// pinging are the rows with a ping running.
+	pinging map[netip.Addr]bool
+	// result is the latest ping's result, above the list.
+	result *widget.Label
 }
 
-// newPeersView returns the Peers tab. onMore opens a row's ⋯ menu.
-func newPeersView(onMore func(r peerRow, from fyne.CanvasObject)) *peersView {
-	v := &peersView{onMore: onMore}
+// newPeersView returns the Peers tab. onMore opens a row's ⋯ menu; onAdd
+// opens the Add peer dialog.
+func newPeersView(onMore func(r peerRow, from fyne.CanvasObject), onAdd func()) *peersView {
+	v := &peersView{onMore: onMore, pinging: map[netip.Addr]bool{}}
 	v.note = widget.NewLabel(peersNoteStopped)
 	v.note.Wrapping = fyne.TextWrapWord
 	v.note.Importance = widget.LowImportance
+	v.addB = widget.NewButtonWithIcon("Add peer…", theme.ContentAddIcon(), onAdd)
+	v.result = widget.NewLabel("")
+	v.result.Wrapping = fyne.TextWrapWord
+	v.result.Hide()
 
 	v.list = widget.NewList(
 		func() int { return len(v.rows) },
@@ -137,7 +147,11 @@ func newPeersView(onMore func(r peerRow, from fyne.CanvasObject)) *peersView {
 	v.empty = container.NewVBox(emptyText)
 	v.empty.Hide()
 
-	v.root = container.NewPadded(container.NewBorder(v.note, nil, nil, nil,
+	top := container.NewVBox(
+		container.NewBorder(nil, nil, nil, container.NewCenter(v.addB), v.note),
+		v.result,
+	)
+	v.root = container.NewPadded(container.NewBorder(top, nil, nil, nil,
 		container.NewStack(v.list, v.empty)))
 	return v
 }
@@ -152,6 +166,9 @@ func (v *peersView) update(i widget.ListItemID, it *peerRowItem) {
 	if v.copied.IsValid() && v.copied == r.IP {
 		it.state.Importance = widget.MediumImportance
 		it.state.SetText("Copied")
+	} else if v.pinging[r.IP] {
+		it.state.Importance = widget.MediumImportance
+		it.state.SetText(pingTextPinging)
 	} else {
 		switch r.Status {
 		case peerConnected:
@@ -173,11 +190,36 @@ func (v *peersView) set(rows []peerRow, running bool) {
 		v.note.SetText(peersNoteRunning)
 	} else {
 		v.note.SetText(peersNoteStopped)
+		v.result.Hide() // a result from before disconnecting is stale
 	}
 	v.empty.Hidden = len(rows) > 0
 	v.list.Hidden = len(rows) == 0
 	v.empty.Refresh()
 	v.list.Refresh()
+}
+
+// setPinging marks ip's row as pinging or not.
+func (v *peersView) setPinging(ip netip.Addr, on bool) {
+	if on {
+		v.pinging[ip] = true
+	} else {
+		delete(v.pinging, ip)
+	}
+	v.list.Refresh()
+}
+
+// showResult shows a ping's result above the list.
+func (v *peersView) showResult(text string, k pingKind) {
+	switch k {
+	case pingAnswered:
+		v.result.Importance = widget.SuccessImportance
+	case pingNoAnswer, pingError:
+		v.result.Importance = widget.WarningImportance
+	default:
+		v.result.Importance = widget.MediumImportance
+	}
+	v.result.SetText(text)
+	v.result.Show()
 }
 
 // showCopied makes ip's row say "Copied" for a moment.
@@ -215,9 +257,13 @@ func (m *mainWindow) renderPeers() {
 
 // peerMenu returns the ⋯ menu items for r.
 func (m *mainWindow) peerMenu(r peerRow) []*fyne.MenuItem {
-	items := []*fyne.MenuItem{
-		fyne.NewMenuItem("Copy IP", func() { m.copyPeerIP(r) }),
+	items := []*fyne.MenuItem{}
+	if r.Actions.Ping {
+		ping := fyne.NewMenuItem("Ping", func() { m.pingPeer(r.IP, r.Title) })
+		ping.Disabled = m.peers.pinging[r.IP]
+		items = append(items, ping)
 	}
+	items = append(items, fyne.NewMenuItem("Copy IP", func() { m.copyPeerIP(r) }))
 	if r.Saved() {
 		items = append(items, fyne.NewMenuItem("Rename…", func() { m.renamePeer(r) }))
 	} else {

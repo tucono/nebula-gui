@@ -192,6 +192,11 @@ func checkNewPeer(name, ip string, st *api.StatusResponse, saved []savedPeer) er
 	if _, err := cleanPeerName(name); err != nil {
 		return &peerInputError{Field: "name", Msg: peerNameMessage(err)}
 	}
+	return checkNewPeerIP(ip, st, saved)
+}
+
+// checkNewPeerIP is the part of checkNewPeer about the address.
+func checkNewPeerIP(ip string, st *api.StatusResponse, saved []savedPeer) error {
 	overlays := statusOverlays(st)
 	a, err := parsePeerAddr(ip)
 	if err != nil {
