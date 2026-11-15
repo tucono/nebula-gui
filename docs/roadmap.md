@@ -37,6 +37,8 @@ Detailed plan: [m3-plan.md](m3-plan.md).
 - [x] Peers in the troubleshooting report (masked; saved names never included)
 
 ## M4: Desktop integration and packaging
+Detailed plan: [m4-plan.md](m4-plan.md).
+
 - [ ] System tray menu, plus closing the window keeps the app running in the tray
 - [ ] Service install and uninstall: systemd unit, launchd plist, Windows Service
 - [ ] Installers: `.deb`/`.rpm` (nfpm), `.pkg` (macOS), MSI or Inno Setup (Windows, bundling wintun.dll)
