@@ -266,6 +266,7 @@ func (m *mainWindow) applyPoll(r pollResult) {
 			m.applyStatus(r.Status)
 			if r.PeersUpdated {
 				m.in.Peers = r.Peers
+				m.remember(namesFromPeers(r.Peers))
 			}
 		default: // another API version: no status to show
 			m.in.Err, m.in.Status, m.in.Peers = nil, nil, nil

@@ -13,6 +13,9 @@ cert HOST-1, groups GROUP-1, GROUP-2, valid until 2027-11-11, CA valid until 203
 Config: 1 lighthouse (HOST-2:4242), am_lighthouse=false, relays off, punchy on, listen port 4242,
 0 tun.routes, 0 unsafe_routes, firewall 3 inbound / 1 outbound rules
 
+## Peers
+None: Nebula isn't running.
+
 ## Recent app events
 ```
 2026-11-12T14:02:58.001-06:00 app started os=linux/amd64 version=0.2.0

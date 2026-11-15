@@ -90,13 +90,26 @@ func (m *mainWindow) openHelp(p *problem) {
 		ctx, cancel := context.WithTimeout(ctx, actionTimeout)
 		defer cancel()
 		diag, err := m.c.Diagnostics(ctx, api.DefaultDiagnosticsLines)
+		var peers []api.Peer
+		var peersErr error
+		if diag != nil {
+			var pr *api.PeersResponse
+			if pr, peersErr = m.c.Peers(ctx); pr != nil {
+				peers = pr.Peers
+			}
+		}
 		fyne.Do(func() {
 			if diag != nil {
 				m.remember(namesFromStatus(&diag.Status))
 				m.remember(namesFromSummary(diag.ConfigSummary))
+				m.remember(namesFromPeers(peers))
 			} else {
 				m.log.Add("diagnostics failed", "error", errorDetails(err))
 			}
+			if peersErr != nil {
+				m.log.Add("peers for report failed", "error", errorDetails(peersErr))
+			}
+			h.in.Peers, h.in.PeersErr = peers, peersErr
 			h.setDiagnostics(diag, err, m.names.Names())
 		})
 	})

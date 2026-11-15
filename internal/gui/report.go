@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -49,6 +50,10 @@ type reportInput struct {
 	// Diag is the service's diagnostics, or nil with DiagErr saying why.
 	Diag    *api.DiagnosticsResponse
 	DiagErr error
+	// Peers is the service's peer list, or nil with PeersErr saying why.
+	// It's read only when the diagnostics were.
+	Peers    []api.Peer
+	PeersErr error
 	// Events are the newest GUI log entries, oldest first.
 	Events []appEvent
 	// Names are the names remembered for masking.
@@ -110,6 +115,7 @@ type reporter struct {
 	problemTitle   string
 	problemDetails string
 	state          []string
+	peers          []string
 	events         []string
 	// lines are the service log lines, masked and shortened.
 	lines []string
@@ -143,6 +149,14 @@ func (r *reporter) prepare() {
 		}
 		for _, h := range sum.StaticHostNames {
 			m.addHost(h)
+		}
+	}
+	for _, p := range r.in.Peers {
+		if p.Name != "" {
+			m.addHost(p.Name)
+		}
+		for _, g := range p.Groups {
+			m.addGroup(g)
 		}
 	}
 	n := r.in.Names
@@ -192,6 +206,7 @@ func (r *reporter) prepare() {
 		}
 	}
 	r.state = r.stateLines()
+	r.peers = r.peerLines()
 	for _, e := range r.in.Events {
 		if eventUnsafe(e) {
 			r.removed++
@@ -255,6 +270,11 @@ func (r *reporter) render(lines []string, dropped int) string {
 
 	b.WriteString("\n## State\n")
 	for _, l := range r.state {
+		b.WriteString(l + "\n")
+	}
+
+	b.WriteString("\n## Peers\n")
+	for _, l := range r.peers {
 		b.WriteString(l + "\n")
 	}
 
@@ -441,6 +461,59 @@ func (r *reporter) stateLines() []string {
 		out = append(out, "Config: stored, but it couldn't be summarized")
 	}
 	return out
+}
+
+// peerLines is the Peers section: one line per tunnel, sorted by overlay
+// IP. Saved names are never in it; they're personal and can't be masked
+// reliably.
+func (r *reporter) peerLines() []string {
+	m := r.m
+	switch {
+	case r.in.Diag == nil:
+		return []string{"Not available: the background service couldn't be reached."}
+	case r.in.PeersErr != nil:
+		return []string{"Not available: " + m.text(errorDetails(r.in.PeersErr))}
+	case len(r.in.Peers) == 0 && (r.status == nil || r.status.State != api.StateRunning):
+		return []string{"None: Nebula isn't running."}
+	case len(r.in.Peers) == 0:
+		return []string{"None."}
+	}
+
+	peers := slices.Clone(r.in.Peers)
+	slices.SortStableFunc(peers, func(a, b api.Peer) int {
+		return firstPeerAddr(a).Compare(firstPeerAddr(b))
+	})
+	out := make([]string, 0, len(peers))
+	for _, p := range peers {
+		name := "(name not known yet)"
+		if p.Name != "" {
+			name = m.host(p.Name)
+		}
+		ips := make([]string, len(p.VpnIPs))
+		for i, ip := range p.VpnIPs {
+			ips[i] = m.text(ip)
+		}
+		parts := []string{name, strings.Join(ips, ", "), string(p.State)}
+		switch {
+		case p.Relayed:
+			parts = append(parts, "relayed")
+		case p.CurrentRemote != "":
+			parts = append(parts, "direct "+m.text(p.CurrentRemote))
+		}
+		if p.LastPingRTTMs != nil {
+			parts = append(parts, "last ping "+formatMs(*p.LastPingRTTMs))
+		}
+		out = append(out, strings.Join(parts, " · "))
+	}
+	return out
+}
+
+// firstPeerAddr is p's first overlay IP, or the zero address.
+func firstPeerAddr(p api.Peer) netip.Addr {
+	if a := peerAddrs(p); len(a) > 0 {
+		return a[0]
+	}
+	return netip.Addr{}
 }
 
 func (r *reporter) configLine(sum *api.ConfigSummary) string {
@@ -741,6 +814,19 @@ func namesFromStatus(st *api.StatusResponse) rememberedNames {
 		if c.Fingerprint != "" {
 			n.Fingerprint = append(n.Fingerprint, c.Fingerprint)
 		}
+	}
+	return n
+}
+
+// namesFromPeers are the cert names and groups of peers, to remember for
+// masking. Saved names aren't among them: they never go in a report.
+func namesFromPeers(peers []api.Peer) rememberedNames {
+	var n rememberedNames
+	for _, p := range peers {
+		if p.Name != "" {
+			n.Hosts = append(n.Hosts, p.Name)
+		}
+		n.Groups = append(n.Groups, p.Groups...)
 	}
 	return n
 }

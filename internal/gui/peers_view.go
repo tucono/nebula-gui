@@ -381,6 +381,8 @@ func (m *mainWindow) savePeerName(ip netip.Addr, name string) {
 	}
 	if err != nil {
 		m.peerSaveFailed(err)
+	} else {
+		m.log.Add("peer renamed", "ip", ip.String())
 	}
 	m.renderPeers()
 }
@@ -388,6 +390,8 @@ func (m *mainWindow) savePeerName(ip netip.Addr, name string) {
 func (m *mainWindow) removePeer(r peerRow) {
 	if err := m.saved.Remove(r.IP); err != nil {
 		m.peerSaveFailed(err)
+	} else {
+		m.log.Add("peer removed", "ip", r.IP.String())
 	}
 	m.renderPeers()
 }

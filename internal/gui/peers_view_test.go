@@ -237,7 +237,19 @@ func TestPeerRenameAndRemove(t *testing.T) {
 			t.Errorf("service call %q", c)
 		}
 	}
-	// The GUI log never has a saved name.
+	// The GUI log has each change by IP, and never a saved name.
+	var changes []string
+	for _, ev := range m.log.Recent(1000) {
+		if strings.HasPrefix(ev.Msg, "peer ") {
+			changes = append(changes, ev.Msg+" "+ev.Attrs["ip"])
+		}
+	}
+	if want := []string{
+		"peer renamed 192.168.100.10", "peer renamed 192.168.100.11",
+		"peer removed 192.168.100.10", "peer removed 192.168.100.11",
+	}; !slices.Equal(changes, want) {
+		t.Errorf("log %v, want %v", changes, want)
+	}
 	for _, ev := range m.log.Recent(1000) {
 		l := fmt.Sprint(ev)
 		if strings.Contains(l, "laptop") || strings.Contains(l, "Bob") {

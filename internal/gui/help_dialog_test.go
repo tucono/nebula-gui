@@ -185,3 +185,47 @@ func TestRemoveConfigForgetsNames(t *testing.T) {
 		t.Errorf("names kept after removing the config: %+v", n)
 	}
 }
+
+func TestGetHelpPeers(t *testing.T) {
+	m, svc, _ := peersWindow(t)
+	// The poll remembered the peers' cert names for masking.
+	if h := m.names.Names().Hosts; !slices.Contains(h, "alice") || !slices.Contains(h, "lighthouse") {
+		t.Errorf("remembered hosts %v", h)
+	}
+	svc.takeCalls()
+
+	m.openHelp(nil)
+	if calls := svc.takeCalls(); !slices.Equal(calls, []string{"diagnostics", "peers"}) {
+		t.Errorf("calls %v", calls)
+	}
+	text := m.help.preview.Text
+	if !strings.Contains(text, "## Peers\n") || !strings.Contains(text, " · established") {
+		t.Errorf("no peers section:\n%s", text)
+	}
+	// Saved names are never in a report, masked or not.
+	for _, mask := range []bool{true, false} {
+		m.help.details.SetChecked(!mask)
+		text := m.help.preview.Text
+		if strings.Contains(text, "Bob") {
+			t.Errorf("mask %v: saved name in the report", mask)
+		}
+		if mask && strings.Contains(text, "192.168.100.10") {
+			t.Error("unmasked peer address")
+		}
+		if !mask && !strings.Contains(text, "alice · 192.168.100.10 · established") {
+			t.Errorf("unmasked peers section:\n%s", text)
+		}
+	}
+}
+
+func TestGetHelpPeersFailed(t *testing.T) {
+	m, svc, _ := peersWindow(t)
+	svc.set(func(f *fakeService) { f.peersErr = &api.Error{Code: api.CodeInternal, Message: "boom"} })
+	m.openHelp(nil)
+	if !strings.Contains(m.help.preview.Text, "## Peers\nNot available: ") {
+		t.Errorf("preview:\n%s", m.help.preview.Text)
+	}
+	if !slices.Contains(msgs(m.log), "peers for report failed") {
+		t.Errorf("log %v", msgs(m.log))
+	}
+}

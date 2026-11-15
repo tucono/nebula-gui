@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -135,6 +136,94 @@ var fixtureSecrets = []string{
 	"2001:db8", "fe80:", "alice", "lighthouse.example", "example.net", "gamers",
 	strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("e", 64),
 	strings.Repeat("c", 64), strings.Repeat("d", 64), "/home/tester", "tester",
+	"bob-desktop", "admins",
+}
+
+// fixturePeers are a direct peer that answered a ping, a relayed one and
+// one still handshaking, out of order.
+func fixturePeers() []api.Peer {
+	rtt := 23.4
+	return []api.Peer{
+		{VpnIPs: []string{"192.168.100.40"}, State: api.PeerPending},
+		{VpnIPs: []string{"192.168.100.31"}, Name: "alice-laptop", Groups: []string{"users"}, State: api.PeerEstablished,
+			CurrentRemote: "[2001:db8::7]:4242", RemoteAddrs: []string{"[2001:db8::7]:4242", "10.0.0.31:4242"}, LastPingRTTMs: &rtt},
+		{VpnIPs: []string{"192.168.100.32"}, Name: "bob-desktop", Groups: []string{"admins"}, State: api.PeerEstablished, Relayed: true},
+		{VpnIPs: []string{"192.168.100.33"}, Name: "alice-phone", State: api.PeerEstablished, CurrentRemote: "198.51.100.20:4242"},
+	}
+}
+
+func TestReportPeers(t *testing.T) {
+	in := baseInput()
+	in.Diag = fixtureDiag(t, fixtureStatus(api.StateRunning))
+	in.Peers = fixturePeers()
+	got, err := buildReport(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// alice-laptop has the same name, overlay and public placeholders
+	// here as in the log.
+	for _, s := range []string{
+		"\n(name not known yet) · OVERLAY-5 · pending\n",
+		"HOST-3 · OVERLAY-2 · established · direct [PUBLIC-1]:4242 · last ping 23 ms\n",
+		`"remote":"[PUBLIC-1]:4242"`,
+		`"certName":"HOST-3"`,
+		" · established · relayed\n",
+	} {
+		if !strings.Contains(got, s) {
+			t.Errorf("missing %q", s)
+		}
+	}
+	// Peers are sorted by overlay IP.
+	in.Mask = false
+	got, _ = buildReport(in)
+	want := "## Peers\n" +
+		"alice-laptop · 192.168.100.31 · established · direct [2001:db8::7]:4242 · last ping 23 ms\n" +
+		"bob-desktop · 192.168.100.32 · established · relayed\n" +
+		"alice-phone · 192.168.100.33 · established · direct 198.51.100.20:4242\n" +
+		"(name not known yet) · 192.168.100.40 · pending\n"
+	if !strings.Contains(got, want) {
+		t.Errorf("unmasked peers section; got:\n%s", got)
+	}
+
+	for _, c := range []struct {
+		name  string
+		in    func(*reportInput)
+		lines string
+	}{
+		{"unreachable", func(in *reportInput) { in.Diag, in.DiagErr, in.Peers = nil, errRefused, nil },
+			"Not available: the background service couldn't be reached."},
+		{"error", func(in *reportInput) {
+			in.Peers, in.PeersErr = nil, &api.Error{Code: api.CodeNotFound, Message: "no route for 192.168.100.31"}
+		}, "Not available: "},
+		{"stopped", func(in *reportInput) { in.Diag.Status.State, in.Peers = api.StateStopped, nil },
+			"None: Nebula isn't running."},
+		{"none", func(in *reportInput) { in.Peers = []api.Peer{} }, "None."},
+	} {
+		in := baseInput()
+		in.Diag = fixtureDiag(t, fixtureStatus(api.StateRunning))
+		in.Peers = fixturePeers()
+		c.in(&in)
+		got, err := buildReport(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "## Peers\n"+c.lines) {
+			t.Errorf("%s: peers section; got:\n%s", c.name, got)
+		}
+		if strings.Contains(got, "192.168.100.31") {
+			t.Errorf("%s: unmasked address", c.name)
+		}
+	}
+}
+
+func TestNamesFromPeers(t *testing.T) {
+	n := namesFromPeers(fixturePeers())
+	if !slices.Equal(n.Hosts, []string{"alice-laptop", "bob-desktop", "alice-phone"}) || !slices.Equal(n.Groups, []string{"users", "admins"}) {
+		t.Errorf("%+v", n)
+	}
+	if len(n.Overlays) != 0 || len(n.Fingerprint) != 0 {
+		t.Errorf("%+v", n)
+	}
 }
 
 func TestReportGolden(t *testing.T) {
@@ -148,6 +237,8 @@ func TestReportGolden(t *testing.T) {
 		appEvent{Time: reportTime(14, 3, 20, 2), Msg: "connect clicked"},
 		appEvent{Time: reportTime(14, 3, 20, 310), Msg: "connect done", Attrs: map[string]string{"state": "running"}},
 	)
+
+	running.Peers = fixturePeers()
 
 	failed := baseInput()
 	fst := fixtureStatus(api.StateError)

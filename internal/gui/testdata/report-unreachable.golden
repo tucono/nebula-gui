@@ -9,6 +9,9 @@ dial unix: connect: connection refused
 ## State
 The background service couldn't be reached: dial unix: connect: connection refused
 
+## Peers
+Not available: the background service couldn't be reached.
+
 ## Recent app events
 ```
 2026-11-12T14:02:58.001-06:00 app started os=linux/amd64 version=0.2.0
