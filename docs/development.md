@@ -59,11 +59,7 @@ Rules:
 
 ## Dependencies
 
-The module is `github.com/tucono/nebula-gui`. Fyne and go-winio were added in M0, Nebula in M1. pro-bing (M3) is added when the code that uses it lands:
-
-```sh
-go get github.com/prometheus-community/pro-bing@latest
-```
+The module is `github.com/tucono/nebula-gui`. Fyne and go-winio were added in M0, Nebula in M1, and pro-bing (the service's ICMP ping) in M3.
 
 Pin the Nebula version on purpose and update it on purpose. Read Nebula's CHANGELOG before each bump. `go.mod` also lists Nebula's `nebula` and `nebula-cert` commands as `tool` dependencies, so the test lab uses the same version as the service (`go tool nebula-cert …` works too). To bump:
 
