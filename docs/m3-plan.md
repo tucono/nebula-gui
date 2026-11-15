@@ -17,6 +17,8 @@ At the end of M3, a **Peers** tab shows who this computer is talking to, under n
 
 The people using the app are the same as in M2 (see [Who this is for](m2-plan.md#who-this-is-for)): plain words, no jargon outside the details, and a clear next step when something doesn't work.
 
+M3 is done. A few things changed while building it; see [Changes from the plan](#changes-from-the-plan).
+
 **Left for later:** the tray and slower polling while the window is hidden (M4), routes and cert-expiry warnings (M5), testing relays (needs namespaces, see [testing.md](testing.md#relay-scenario-later)).
 
 ## Starting point
@@ -114,6 +116,8 @@ The first ping to a peer without a tunnel often loses its first replies while Ne
 | request rejected (`rate_limited`) | "Too many pings at once. Try again in a moment." |
 | `ping_failed` / `internal` | a [problem](m2-plan.md#rules-for-messages) with details and **Get help…** |
 
+As built, results show in a line above the list rather than in the row, and "Connecting…" never ends a ping; see [Changes from the plan](#changes-from-the-plan).
+
 `describePing(before, after *api.Peer, res *api.PingResponse, err error) pingView` is a pure function with a table test, like `describeStatus`.
 
 The "firewall" wording matters: Nebula's own firewall drops ICMP unless the peer's `firewall.inbound` allows it. The lab allows it; a real network might not.
@@ -204,6 +208,18 @@ The "firewall" wording matters: Nebula's own firewall drops ICMP unless the peer
 ### GUI smoke test
 
 The manual test for M3 is in [testing.md](testing.md#gui-smoke-test-m3): add Alice by IP, see her as Not connected, ping her and see her become Connected under her name, plus the Add peer checks, closing a connection, a peer that doesn't answer, and a report without saved names.
+
+## Changes from the plan
+
+What was built differs from the steps above in these ways, mostly after the operator checks on COSMIC/Wayland:
+
+- **Ping results show above the list, one line per peer.** The newest result comes first, and at most three are kept. Each line starts with the row's name and is coloured by the result. The row itself shows only "Pinging…" while a ping runs. A single line for every result made overlapping pings overwrite each other, and a result in the row would have made rows grow.
+- **No "Still connecting".** A tunnel that's still pending after a ping without replies counts as **No answer**. Nebula keeps a pending tunnel for an address nobody has while it asks the lighthouse, so a "still connecting" result never cleared for such an address, while a real peer finishes its handshake well within a ping's timeout. The retry after a ping that opened a tunnel stays.
+- **The GUI reads `GET /v1/peers` itself before and after each ping**, rather than relying on the last poll, so the tunnel state it judges by is current. It pokes the poller once the ping is done.
+- **Problems from a ping** (`ping_failed`, `not_running`, `not_in_overlay`, `own_address`) open a small dialog with the steps and **Get help…**, since the Peers tab has no banner. `rate_limited` is a result line ("Too many pings at once…"), not a problem.
+- **The Add peer dialog** shows its message in a wrapping line under the form instead of the entry's one-line hint, and keeps a fixed width. Enter runs the default button (**Add and ping** while connected, else **Add**); Escape cancels.
+- **GUI log entries for peer actions** came with step 6 (`ping`, `ping failed`, `ping refused`, `peer added`, `closed connection`) and step 7 (`peer renamed`, `peer removed`). All carry the IP only.
+- **The report's Peers section** is read together with the diagnostics. Each line is `HOST-3 · OVERLAY-2 · established · direct [PUBLIC-1]:4242 · last ping 23 ms`, sorted by overlay IP, with "relayed" for relayed peers and "(name not known yet)" for a pending one. Without lines it says "None.", "None: Nebula isn't running." or "Not available: …" with the reason. Peer cert names and groups are remembered for masking from every peer poll, not only when a report is made.
 
 ## Risks and decisions
 

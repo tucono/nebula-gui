@@ -30,11 +30,11 @@ Detailed plan: [m2-plan.md](m2-plan.md).
 ## M3: Peers and ping
 Detailed plan: [m3-plan.md](m3-plan.md).
 
-- [ ] `GET /v1/peers`, `POST /v1/peers/{ip}/close`
-- [ ] `POST /v1/ping` (pro-bing, limits, subnet check, last RTT per peer)
-- [ ] Peers tab with auto-refresh and a ⋯ menu per row: ping, copy IP, rename, close connection
-- [ ] Saved peers: the user's own names for peers, and **Add peer…** for peers without a tunnel yet
-- [ ] Peers in the troubleshooting report (masked; saved names never included)
+- [x] `GET /v1/peers`, `POST /v1/peers/{ip}/close`
+- [x] `POST /v1/ping` (pro-bing, limits, subnet check, last RTT per peer)
+- [x] Peers tab with auto-refresh and a ⋯ menu per row: ping, copy IP, rename, close connection
+- [x] Saved peers: the user's own names for peers, and **Add peer…** for peers without a tunnel yet
+- [x] Peers in the troubleshooting report (masked; saved names never included)
 
 ## M4: Desktop integration and packaging
 - [ ] System tray menu, plus closing the window keeps the app running in the tray

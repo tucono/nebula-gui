@@ -131,7 +131,7 @@ No body. Returns the new `status`.
       "remote_addrs": ["203.0.113.7:4242", "10.0.0.5:4242"],
       "relayed": false,
       "cert_not_after": "2027-01-01T00:00:00Z",
-      "last_ping_rtt_ms": 23.4      // null if this peer has never been pinged
+      "last_ping_rtt_ms": 23.4      // null if no ping to this peer got a reply
     }
   ]
 }
@@ -161,7 +161,7 @@ Response:
 ```
 `rtt_*_ms` are omitted when `received` is 0. No replies is a normal result, not an error: `ping_failed` means the echo requests couldn't be sent at all.
 
-The first ping often times out while the handshake runs, so the GUI should present it as "connecting…" rather than "failed", check the tunnel state, and try once more (see [m3-plan.md](m3-plan.md#pinging)).
+The first ping often times out while the handshake runs. The GUI reads `GET /v1/peers` before and after a ping: when a ping without replies opened a tunnel, it shows "Connecting…" and pings once more. A tunnel still pending after a ping without replies counts as no answer, because Nebula keeps one for an address nobody has while it asks the lighthouse (see [m3-plan.md](m3-plan.md#changes-from-the-plan)).
 
 ### `GET /v1/logs?since=<seq>`
 ```json

@@ -10,7 +10,7 @@
 | `internal/api` | JSON round-tripping and backward compatibility (decoding with unknown fields) |
 | `internal/service` | The state machine, using a **fake engine** so no tun device or root is needed. Config validation, including rejecting path-based `pki.*` values. Config store, redaction, log buffer. Peers and close (dedup, errors), ping validation, rate limits and the RTT map, with a fake pinger (M3). |
 | `internal/pki` | Inlining PEM from relative paths, and extracting cert fields |
-| `internal/gui` | Logic (problem catalogue, status model, PEM inlining, log formatting, masking; in M3 the saved-peer store, peer rows, Add peer checks and ping results) plus headless window tests with `fyne.io/fyne/v2/test` and a fake service. The troubleshooting report has golden files in `internal/gui/testdata/`, built from a synthetic service log that uses only documentation ranges and made-up names; run `go test ./internal/gui -run TestReportGolden -update` to rewrite them, and review the diff. |
+| `internal/gui` | Logic (problem catalogue, status model, PEM inlining, log formatting, masking; in M3 the saved-peer store, peer rows, the Peers tab, Add peer checks, ping results and the report's Peers section) plus headless window tests with `fyne.io/fyne/v2/test` and a fake service. The troubleshooting report has golden files in `internal/gui/testdata/`, built from a synthetic service log that uses only documentation ranges and made-up names; run `go test ./internal/gui -run TestReportGolden -update` to rewrite them, and review the diff. |
 
 `internal/service` depends on an interface, not on Nebula directly (`internal/service/engine.go`):
 
@@ -105,13 +105,14 @@ Start with `make lab-up`, `make dev-service` and `make gui`, and `testlab/lab.sh
 ### GUI smoke test (M3)
 1. Import `testlab/dev/config.paths.yml` and connect. The Peers tab shows `lighthouse` as Connected.
 2. **Add peer…** with name "Alice" and `192.168.100.10`. The row shows Alice, Not connected.
-3. Ping Alice. It may show "Connecting…" first, then Connected, direct, with an RTT. The cert name `alice` shows under the name.
+3. Ping Alice. The row shows "Pinging…", and a line above the list may show "Alice: Connecting…" first, then "Alice: Answered in N ms." The row becomes Connected, direct, with the last ping time, and the cert name `alice` shows under the name.
 4. Try to add `10.0.0.1`, this host's own `192.168.100.20`, and `192.168.100.10` again. Each gets its own message.
 5. **Close connection** on Alice. She goes back to Not connected; ping brings her back.
-6. Add `192.168.100.99` (nothing there) and ping it. It ends with "No answer…".
+6. Add `192.168.100.99` (nothing there) and ping it. It ends with "No answer…", and the row stays Not connected.
+   Then ping it and Alice right after each other: each gets its own result line, and neither overwrites the other.
 7. Stop bob's lab node, add bob (`192.168.100.11`) and ping: "No answer…". Start it again and ping: Connected.
-8. **Get help…**: the Peers section is there and masked, and the name "Alice" doesn't appear in the report, with or without masking.
-9. Disconnect. The tun device disappears (`ip link`). Only saved peers remain, all Not connected, with Ping disabled.
+8. **Get help…**: the Peers section lists `HOST-n · OVERLAY-n · established · direct PUBLIC-n:4242 · last ping N ms` lines, with the same placeholders as the service log. With **Include network details** it shows `alice · 192.168.100.10 · …`. The name "Alice" doesn't appear in the report either way, and Recent app events show `peer added`, `ping` and `closed connection` with only an IP.
+9. Disconnect. The tun device disappears (`ip link`). Only saved peers remain, all Not connected, with Ping disabled, and the result lines are gone. A report now says "None: Nebula isn't running." under Peers.
 10. Remove the config and import it again. The saved peers are still there.
 
 ### Relay scenario (later)
