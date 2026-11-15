@@ -110,7 +110,7 @@ func (m *mainWindow) pingPeer(ip netip.Addr, title string) {
 		return
 	}
 	m.peers.setPinging(ip, true)
-	m.peers.showResult(title+": "+pingTextPinging, pingWaiting)
+	m.peers.showResult(ip, title+": "+pingTextPinging, pingWaiting)
 
 	m.spawn(func() {
 		before := m.lookupPeer(ip)
@@ -122,7 +122,7 @@ func (m *mainWindow) pingPeer(ip netip.Addr, title string) {
 			v := describePing(before, after, res, err)
 			m.logPing(ip, res, err, v)
 			if v.Retry && attempt == 0 {
-				fyne.Do(func() { m.peers.showResult(title+": "+v.Text, v.Kind) })
+				fyne.Do(func() { m.peers.showResult(ip, title+": "+v.Text, v.Kind) })
 				before = after
 				continue
 			}
@@ -165,7 +165,7 @@ func (m *mainWindow) logPing(ip netip.Addr, res *api.PingResponse, err error, v 
 // ping time catch up.
 func (m *mainWindow) pingDone(ip netip.Addr, title string, v pingView) {
 	m.peers.setPinging(ip, false)
-	m.peers.showResult(title+": "+v.Text, v.Kind)
+	m.peers.showResult(ip, title+": "+v.Text, v.Kind)
 	if v.Problem != nil {
 		m.showProblemDialog(v.Problem)
 	}

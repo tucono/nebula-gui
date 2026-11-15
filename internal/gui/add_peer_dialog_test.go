@@ -85,8 +85,8 @@ func TestAddPeerAndPing(t *testing.T) {
 	if got := pings(svc.takeCalls()); !slices.Equal(got, []string{"ping 192.168.100.12"}) {
 		t.Errorf("pings %v", got)
 	}
-	if m.peers.result.Text != "Carol's laptop: "+pingTextNoAnswer {
-		t.Errorf("result %q", m.peers.result.Text)
+	if firstResult(m) != "Carol's laptop: "+pingTextNoAnswer {
+		t.Errorf("result %q", firstResult(m))
 	}
 	rowFor(t, m, "Carol's laptop")
 	if !slices.Contains(msgs(m.log), "peer added") {

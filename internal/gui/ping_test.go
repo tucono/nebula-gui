@@ -64,6 +64,25 @@ func TestDescribePing(t *testing.T) {
 	}
 }
 
+// shownResults returns the ping results shown above the list, top first.
+func shownResults(m *mainWindow) []string {
+	out := []string{}
+	for _, l := range m.peers.resultLabels {
+		if !l.Hidden {
+			out = append(out, l.Text)
+		}
+	}
+	return out
+}
+
+// firstResult returns the top ping result, or "" when none shows.
+func firstResult(m *mainWindow) string {
+	if r := shownResults(m); len(r) > 0 {
+		return r[0]
+	}
+	return ""
+}
+
 func pings(calls []string) []string {
 	out := []string{}
 	for _, c := range calls {
@@ -95,8 +114,8 @@ func TestPingConnectedPeer(t *testing.T) {
 	if got := pings(svc.takeCalls()); !slices.Equal(got, []string{"ping 192.168.100.10"}) {
 		t.Errorf("pings %v", got)
 	}
-	if m.peers.result.Hidden || m.peers.result.Text != "alice: Answered in 12 ms." {
-		t.Errorf("result %q hidden %v", m.peers.result.Text, m.peers.result.Hidden)
+	if firstResult(m) != "alice: Answered in 12 ms." {
+		t.Errorf("result %q", firstResult(m))
 	}
 	if len(m.peers.pinging) != 0 {
 		t.Errorf("still pinging %v", m.peers.pinging)
@@ -112,8 +131,8 @@ func TestPingConnectedPeer(t *testing.T) {
 		}
 	})
 	m.pingPeer(netip.MustParseAddr("192.168.100.10"), "alice")
-	if m.peers.result.Text != "alice: "+pingTextFirewall {
-		t.Errorf("result %q", m.peers.result.Text)
+	if firstResult(m) != "alice: "+pingTextFirewall {
+		t.Errorf("result %q", firstResult(m))
 	}
 	if got := pings(svc.takeCalls()); len(got) != 1 {
 		t.Errorf("pings %v, want no retry", got)
@@ -139,8 +158,8 @@ func TestPingOpensTunnelAndRetries(t *testing.T) {
 	if got := pings(svc.takeCalls()); !slices.Equal(got, []string{"ping 192.168.100.11", "ping 192.168.100.11"}) {
 		t.Errorf("pings %v", got)
 	}
-	if m.peers.result.Text != "Bob's PC: Answered in 12 ms." {
-		t.Errorf("result %q", m.peers.result.Text)
+	if firstResult(m) != "Bob's PC: Answered in 12 ms." {
+		t.Errorf("result %q", firstResult(m))
 	}
 	// The poke reads peers again, so Bob shows as connected.
 	r, _ := m.poller.poll(t.Context())
@@ -169,8 +188,8 @@ func TestPingNobodyThere(t *testing.T) {
 	if got := pings(svc.takeCalls()); len(got) != 2 {
 		t.Errorf("pings %v, want a retry", got)
 	}
-	if m.peers.result.Text != "Ghost: "+pingTextNoAnswer {
-		t.Errorf("result %q", m.peers.result.Text)
+	if firstResult(m) != "Ghost: "+pingTextNoAnswer {
+		t.Errorf("result %q", firstResult(m))
 	}
 }
 
@@ -181,8 +200,8 @@ func TestPingNoAnswer(t *testing.T) {
 	if got := pings(svc.takeCalls()); len(got) != 1 {
 		t.Errorf("pings %v, want one", got)
 	}
-	if m.peers.result.Text != "Bob's PC: "+pingTextNoAnswer {
-		t.Errorf("result %q", m.peers.result.Text)
+	if firstResult(m) != "Bob's PC: "+pingTextNoAnswer {
+		t.Errorf("result %q", firstResult(m))
 	}
 }
 
@@ -196,8 +215,8 @@ func TestPingBusyAndErrors(t *testing.T) {
 		}
 	})
 	m.pingPeer(alice, "alice")
-	if m.peers.result.Text != "alice: "+pingTextBusy {
-		t.Errorf("result %q", m.peers.result.Text)
+	if firstResult(m) != "alice: "+pingTextBusy {
+		t.Errorf("result %q", firstResult(m))
 	}
 	if o := m.w.Canvas().Overlays().Top(); o != nil {
 		t.Errorf("dialog for a busy service: %T", o)
@@ -237,7 +256,41 @@ func TestPingBusyAndErrors(t *testing.T) {
 	if slices.Contains(menuLabels(m.peerMenu(rowFor(t, m, "Bob's PC"))), "Ping") {
 		t.Error("Ping offered while disconnected")
 	}
-	if !m.peers.result.Hidden {
+	if got := shownResults(m); len(got) != 0 {
 		t.Error("result still shown after disconnecting")
+	}
+}
+
+// TestPingResultsPerPeer pings several peers in turn: each keeps its own
+// line, the newest on top, a repeat ping updates its peer's line, and
+// only maxPingLines are kept.
+func TestPingResultsPerPeer(t *testing.T) {
+	m, _, _ := peersWindow(t)
+	alice := netip.MustParseAddr("192.168.100.10")
+	ghost := netip.MustParseAddr("192.168.100.99")
+
+	// A ping that's still running doesn't hide another peer's result.
+	m.peers.showResult(ghost, "Ghost: "+pingTextPinging, pingWaiting)
+	m.peers.showResult(alice, "alice: "+pingTextPinging, pingWaiting)
+	m.peers.showResult(ghost, "Ghost: "+pingTextNoAnswer, pingNoAnswer)
+	m.peers.showResult(alice, "alice: Answered in 12 ms.", pingAnswered)
+	want := []string{"alice: Answered in 12 ms.", "Ghost: " + pingTextNoAnswer}
+	if got := shownResults(m); !slices.Equal(got, want) {
+		t.Errorf("results %q, want %q", got, want)
+	}
+
+	// Pinging Ghost again moves its line to the top.
+	m.pingPeer(ghost, "Ghost")
+	want = []string{"Ghost: " + pingTextNoAnswer, "alice: Answered in 12 ms."}
+	if got := shownResults(m); !slices.Equal(got, want) {
+		t.Errorf("after pinging Ghost again %q, want %q", got, want)
+	}
+
+	// The oldest result goes once there are more than maxPingLines.
+	m.pingPeer(netip.MustParseAddr("192.168.100.1"), "lighthouse")
+	m.pingPeer(netip.MustParseAddr("192.168.100.11"), "Bob's PC")
+	want = []string{"Bob's PC: " + pingTextNoAnswer, "lighthouse: Answered in 12 ms.", "Ghost: " + pingTextNoAnswer}
+	if got := shownResults(m); !slices.Equal(got, want) {
+		t.Errorf("after four peers %q, want %q", got, want)
 	}
 }

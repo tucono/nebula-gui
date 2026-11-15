@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"slices"
 	"strconv"
 	"time"
 
@@ -118,8 +119,21 @@ type peersView struct {
 	copySeq int
 	// pinging are the rows with a ping running.
 	pinging map[netip.Addr]bool
-	// result is the latest ping's result, above the list.
-	result *widget.Label
+	// results are the latest ping results, one per peer, newest first.
+	// They show above the list in resultLabels.
+	results      []pingLine
+	resultLabels []*widget.Label
+}
+
+// maxPingLines is how many peers' ping results show above the list. More
+// would push the list out of a small window.
+const maxPingLines = 3
+
+// pingLine is one peer's latest ping result above the list.
+type pingLine struct {
+	IP   netip.Addr
+	Text string
+	Kind pingKind
 }
 
 // newPeersView returns the Peers tab. onMore opens a row's ⋯ menu; onAdd
@@ -130,9 +144,14 @@ func newPeersView(onMore func(r peerRow, from fyne.CanvasObject), onAdd func()) 
 	v.note.Wrapping = fyne.TextWrapWord
 	v.note.Importance = widget.LowImportance
 	v.addB = widget.NewButtonWithIcon("Add peer…", theme.ContentAddIcon(), onAdd)
-	v.result = widget.NewLabel("")
-	v.result.Wrapping = fyne.TextWrapWord
-	v.result.Hide()
+	resultBox := container.NewVBox()
+	for range maxPingLines {
+		l := widget.NewLabel("")
+		l.Wrapping = fyne.TextWrapWord
+		l.Hide()
+		v.resultLabels = append(v.resultLabels, l)
+		resultBox.Add(l)
+	}
 
 	v.list = widget.NewList(
 		func() int { return len(v.rows) },
@@ -149,7 +168,7 @@ func newPeersView(onMore func(r peerRow, from fyne.CanvasObject), onAdd func()) 
 
 	top := container.NewVBox(
 		container.NewBorder(nil, nil, nil, container.NewCenter(v.addB), v.note),
-		v.result,
+		resultBox,
 	)
 	v.root = container.NewPadded(container.NewBorder(top, nil, nil, nil,
 		container.NewStack(v.list, v.empty)))
@@ -190,7 +209,7 @@ func (v *peersView) set(rows []peerRow, running bool) {
 		v.note.SetText(peersNoteRunning)
 	} else {
 		v.note.SetText(peersNoteStopped)
-		v.result.Hide() // a result from before disconnecting is stale
+		v.clearResults() // results from before disconnecting are stale
 	}
 	v.empty.Hidden = len(rows) > 0
 	v.list.Hidden = len(rows) == 0
@@ -208,18 +227,43 @@ func (v *peersView) setPinging(ip netip.Addr, on bool) {
 	v.list.Refresh()
 }
 
-// showResult shows a ping's result above the list.
-func (v *peersView) showResult(text string, k pingKind) {
-	switch k {
-	case pingAnswered:
-		v.result.Importance = widget.SuccessImportance
-	case pingNoAnswer, pingError:
-		v.result.Importance = widget.WarningImportance
-	default:
-		v.result.Importance = widget.MediumImportance
+// showResult shows ip's ping result above the list. It replaces that
+// peer's earlier result and moves it to the top, so pings to several
+// peers at once don't overwrite each other. The oldest result goes when
+// there are more than maxPingLines.
+func (v *peersView) showResult(ip netip.Addr, text string, k pingKind) {
+	v.results = slices.DeleteFunc(v.results, func(l pingLine) bool { return l.IP == ip })
+	v.results = slices.Insert(v.results, 0, pingLine{IP: ip, Text: text, Kind: k})
+	if len(v.results) > maxPingLines {
+		v.results = v.results[:maxPingLines]
 	}
-	v.result.SetText(text)
-	v.result.Show()
+	v.renderResults()
+}
+
+// clearResults removes every ping result.
+func (v *peersView) clearResults() {
+	v.results = nil
+	v.renderResults()
+}
+
+func (v *peersView) renderResults() {
+	for i, l := range v.resultLabels {
+		if i >= len(v.results) {
+			l.Hide()
+			continue
+		}
+		r := v.results[i]
+		switch r.Kind {
+		case pingAnswered:
+			l.Importance = widget.SuccessImportance
+		case pingNoAnswer, pingError:
+			l.Importance = widget.WarningImportance
+		default:
+			l.Importance = widget.MediumImportance
+		}
+		l.SetText(r.Text)
+		l.Show()
+	}
 }
 
 // showCopied makes ip's row say "Copied" for a moment.
