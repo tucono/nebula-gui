@@ -109,6 +109,24 @@ func (c *Client) Disconnect(ctx context.Context) (*StatusResponse, error) {
 	return c.statusCall(ctx, http.MethodPost, "/v1/disconnect")
 }
 
+// Settings calls GET /v1/settings.
+func (c *Client) Settings(ctx context.Context) (*Settings, error) {
+	var r Settings
+	if err := c.do(ctx, http.MethodGet, "/v1/settings", nil, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// PutSettings calls PUT /v1/settings and returns the stored settings.
+func (c *Client) PutSettings(ctx context.Context, s Settings) (*Settings, error) {
+	var r Settings
+	if err := c.do(ctx, http.MethodPut, "/v1/settings", SettingsRequest{Autoconnect: &s.Autoconnect}, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 // Logs calls GET /v1/logs and returns lines with seq >= since.
 func (c *Client) Logs(ctx context.Context, since uint64) (*LogsResponse, error) {
 	var r LogsResponse

@@ -52,32 +52,37 @@ func (s *Store) Load() (yaml string, ok bool, err error) {
 
 // Save replaces the stored config atomically.
 func (s *Store) Save(yaml string) error {
-	f, err := os.CreateTemp(s.dir, configFile+".tmp*")
-	if err != nil {
+	if err := s.writeFile(configFile, []byte(yaml)); err != nil {
 		return fmt.Errorf("save config: %w", err)
+	}
+	return nil
+}
+
+// writeFile replaces name in the state directory atomically, with mode 0600.
+func (s *Store) writeFile(name string, data []byte) error {
+	f, err := os.CreateTemp(s.dir, name+".tmp*")
+	if err != nil {
+		return err
 	}
 	tmp := f.Name()
 	defer func() { _ = os.Remove(tmp) }() // no-op after a successful rename
 
 	if err := f.Chmod(0o600); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("save config: %w", err)
+		return err
 	}
-	if _, err := f.WriteString(yaml); err != nil {
+	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("save config: %w", err)
+		return err
 	}
 	if err := f.Sync(); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("save config: %w", err)
+		return err
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("save config: %w", err)
+		return err
 	}
-	if err := os.Rename(tmp, filepath.Join(s.dir, configFile)); err != nil {
-		return fmt.Errorf("save config: %w", err)
-	}
-	return nil
+	return os.Rename(tmp, filepath.Join(s.dir, name))
 }
 
 // Delete removes the stored config. Deleting a missing config is not an

@@ -196,3 +196,58 @@ func TestRealNebulaOverSocket(t *testing.T) {
 		}
 	}
 }
+
+// TestServeAutoconnects checks that Serve connects at start-up when the
+// setting is on, and that the settings round-trip through the client.
+func TestServeAutoconnects(t *testing.T) {
+	dir, err := os.MkdirTemp("", "svc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	addr := filepath.Join(dir, "s.sock")
+
+	e := &fakeEngine{}
+	srv, _ := newAutoconnectServer(t, e, true)
+	l, err := ipc.Listen(addr, ipc.ListenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- srv.Serve(ctx, l) }()
+
+	c := api.NewClient(addr)
+	rctx, rcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer rcancel()
+	for {
+		st, err := c.Status(rctx)
+		if err != nil {
+			t.Fatalf("Status: %v", err)
+		}
+		if st.State == api.StateRunning {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	s, err := c.PutSettings(rctx, api.Settings{Autoconnect: false})
+	if err != nil || s.Autoconnect {
+		t.Fatalf("PutSettings = %+v, %v", s, err)
+	}
+	if s, err := c.Settings(rctx); err != nil || s.Autoconnect {
+		t.Fatalf("Settings = %+v, %v", s, err)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Serve did not return after cancel")
+	}
+	if !e.instance().stopped {
+		t.Fatal("Nebula still running after shutdown")
+	}
+}

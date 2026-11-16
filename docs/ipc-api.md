@@ -24,7 +24,7 @@ All types live in `internal/api`. Errors use this shape:
 
 | Code | HTTP status | Meaning |
 |---|---|---|
-| `bad_request` | 400 | Malformed request: bad JSON, a body over 1 MiB, a missing field, a bad query parameter |
+| `bad_request` | 400 | Malformed request: bad JSON, a body over 1 MiB, a missing field, an unknown field in settings, a bad query parameter |
 | `invalid_config` | 422 | The config failed validation or Nebula's dry run |
 | `not_configured` | 409 | No config has been imported |
 | `already_running` | 409 | Connect while Nebula is running |
@@ -197,6 +197,18 @@ Everything a troubleshooting report needs, in one call. `lines` is 1–2000 (def
   - `static_host_names`: the DNS names in `static_host_map`, without ports, so the GUI can mask them.
 - `log` holds the last `N` lines of the [service log file](security.md#service-log-file) as raw JSON strings, oldest first, read across the rotated files. `log_truncated` is `true` when older lines were left out. A line cut short by a crash is returned as it is.
 - **Nothing is masked.** The GUI masks what it shows or shares, so the same data can produce both versions of a report. The endpoint is behind the same socket permissions as every other endpoint.
+
+### `GET /v1/settings` / `PUT /v1/settings`
+```json
+{ "autoconnect": false }
+```
+The service's settings. They apply to every user of the computer, and anyone who can use the socket can change them, the same people who can connect and disconnect.
+
+- `autoconnect`: when the service starts and a config is stored, it connects exactly as `POST /v1/connect` does and logs "connecting automatically". **Off by default.** Only a `PUT` turns it on: importing or deleting a config, installing and upgrading leave it alone. If Nebula fails to start (for example, the network isn't up yet at boot), the service tries again after 30 s, at most three times, and stops trying as soon as the user connects or disconnects, the setting is turned off, or the config is deleted. A rejected config (an expired cert, say) isn't retried. A failure leaves the same state and `error_reason` as a manual connect.
+
+`PUT` takes every field and returns the stored settings. A missing field, an unknown field or a value of the wrong type is `bad_request`, so update settings stay on their own endpoint (see [Updates](#updates)).
+
+The service stores them in `settings.json` in its state directory (`0600`, next to the config). A missing file means the defaults; so does a damaged one, with a warning in the service log.
 
 ## Updates
 

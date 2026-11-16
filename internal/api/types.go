@@ -155,6 +155,20 @@ type ConfigResponse struct {
 	YAML string `json:"yaml"`
 }
 
+// Settings are the service's settings, returned by GET and PUT
+// /v1/settings. They apply to every user of the computer.
+type Settings struct {
+	// Autoconnect makes the service connect when it starts, if a config
+	// is stored. Off by default.
+	Autoconnect bool `json:"autoconnect"`
+}
+
+// SettingsRequest is the body of PUT /v1/settings. Every field is
+// required, and unknown fields are refused.
+type SettingsRequest struct {
+	Autoconnect *bool `json:"autoconnect"`
+}
+
 // PeerState says whether a peer's tunnel is up.
 type PeerState string
 

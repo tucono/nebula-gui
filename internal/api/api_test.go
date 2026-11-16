@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -198,5 +199,26 @@ func TestClientPing(t *testing.T) {
 	r, err = c.Ping(context.Background(), PingRequest{VpnIP: "192.168.100.11", Count: 1})
 	if err != nil || r.Received != 0 || r.RTTAvgMs != nil || got.Count != 1 {
 		t.Fatalf("unanswered ping = %+v, %v (sent %+v)", r, err, got)
+	}
+}
+
+func TestClientPutSettingsSendsFalse(t *testing.T) {
+	var body string
+	c := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/v1/settings" {
+			http.NotFound(w, r)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		_, _ = w.Write([]byte(`{"autoconnect":false}`))
+	}))
+	s, err := c.PutSettings(context.Background(), Settings{Autoconnect: false})
+	if err != nil {
+		t.Fatalf("PutSettings: %v", err)
+	}
+	// The service requires the field, so false must be sent, not omitted.
+	if body != `{"autoconnect":false}` || s.Autoconnect {
+		t.Fatalf("body = %q, settings = %+v", body, s)
 	}
 }

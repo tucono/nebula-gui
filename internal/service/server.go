@@ -57,6 +57,12 @@ type Server struct {
 	logs    *LogBuffer
 	logFile *LogFile
 
+	settings *settingsStore
+	// autoconnectDelay and sleep pace autoconnect's retries; tests
+	// replace them.
+	autoconnectDelay time.Duration
+	sleep            func(ctx context.Context, d time.Duration) bool
+
 	pinger    pinger
 	pingLimit *pingLimiter
 
@@ -82,6 +88,9 @@ func New(opts Options) (*Server, error) {
 		pinger:    proBingPinger{},
 		pingLimit: newPingLimiter(),
 
+		autoconnectDelay: autoconnectDelay,
+		sleep:            sleepCtx,
+
 		instanceID: rand.Text(),
 		osVersion:  osVersion(),
 	}
@@ -96,6 +105,7 @@ func New(opts Options) (*Server, error) {
 		return nil, err
 	}
 	s.mgr = mgr
+	s.settings = loadSettings(opts.Store, s.log)
 	s.log.Info("service started",
 		"service_version", s.version, "nebula_version", s.engine.Version(),
 		"api_version", api.APIVersion, "instance_id", s.instanceID,
@@ -109,6 +119,8 @@ func New(opts Options) (*Server, error) {
 	s.mux.HandleFunc("DELETE /v1/config", s.handleDeleteConfig)
 	s.mux.HandleFunc("POST /v1/connect", s.handleConnect)
 	s.mux.HandleFunc("POST /v1/disconnect", s.handleDisconnect)
+	s.mux.HandleFunc("GET /v1/settings", s.handleGetSettings)
+	s.mux.HandleFunc("PUT /v1/settings", s.handlePutSettings)
 	s.mux.HandleFunc("GET /v1/logs", s.handleLogs)
 	s.mux.HandleFunc("GET /v1/diagnostics", s.handleDiagnostics)
 	s.mux.HandleFunc("GET /v1/peers", s.handlePeers)
@@ -152,9 +164,23 @@ func (w *statusWriter) WriteHeader(code int) {
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // Serve serves the API on l until ctx is cancelled, then shuts down
-// gracefully and stops Nebula. It closes l.
+// gracefully and stops Nebula. It closes l. It also connects
+// automatically if the settings say so.
 func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 	defer s.Close()
+	// Autoconnect runs alongside the API, so the GUI can see it starting.
+	// It must be finished before Close stops Nebula, or it could start
+	// Nebula again afterwards.
+	actx, cancelAuto := context.WithCancel(ctx)
+	autoDone := make(chan struct{})
+	go func() {
+		defer close(autoDone)
+		s.autoconnect(actx)
+	}()
+	defer func() {
+		cancelAuto()
+		<-autoDone
+	}()
 	hs := &http.Server{
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,

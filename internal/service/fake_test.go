@@ -28,7 +28,8 @@ type fakeEngine struct {
 	mu       sync.Mutex
 	checkErr error
 	startErr error
-	starts   int
+	starts   int // successful starts
+	attempts int // every call to Start
 	last     *fakeInstance
 }
 
@@ -55,6 +56,7 @@ func (e *fakeEngine) Check(yaml string) (*ConfigInfo, error) {
 func (e *fakeEngine) Start(string) (Instance, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.attempts++
 	if e.startErr != nil {
 		return nil, e.startErr
 	}
