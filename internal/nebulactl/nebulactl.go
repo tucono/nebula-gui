@@ -157,8 +157,9 @@ type Instance struct {
 // tun device and UDP listeners, so it needs privileges. Nebula logs to l.
 //
 // The PKI checks from Check run again first, so a cert that has expired
-// since it was imported is reported as such. Failures it can classify are
-// returned as *Error.
+// since it was imported is reported as such. Settings the platform needs but
+// Nebula doesn't default, such as the adapter name on Windows, are filled
+// in. Failures it can classify are returned as *Error.
 func Start(raw, buildVersion string, l *slog.Logger) (*Instance, error) {
 	c, err := load(raw, l)
 	if err != nil {
@@ -167,6 +168,7 @@ func Start(raw, buildVersion string, l *slog.Logger) (*Instance, error) {
 	if err := checkConfig(c, time.Now()); err != nil {
 		return nil, err
 	}
+	setDefaults(c)
 	ctrl, err := nebula.Main(c, false, buildVersion, l, nil)
 	if err != nil {
 		return nil, classify(err)

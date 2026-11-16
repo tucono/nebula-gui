@@ -61,6 +61,8 @@ testlab/lab.sh clean   # also deletes the generated PKI
 
 `lab.sh broken` writes configs the GUI import should refuse, each with its own message, to `testlab/dev/broken/`: `expired.yml` (a host cert that has expired), `key-mismatch.yml` (dev's cert with alice's key), `missing-key.yml` (a key path from the admin's machine), `sshd.yml` (the debug console turned on) and `notes.txt` (not a config).
 
+To test from a VM (Windows, macOS), start the lab with `LAB_HOST` set to this machine's address on the VM's network, for example `LAB_HOST=10.0.2.2 testlab/lab.sh up` (run `lab.sh down` first if it's already up). The nodes listen on that address instead of 127.0.0.1, and the dev configs point at it, so import `testlab/dev/config.paths.yml` on the VM along with `testlab/pki/`. This exposes the lab on that network, so use it only on a host-only or NAT network. The firewall must allow UDP 4301–4303 from the VM.
+
 ### Smoke test with curl (M1)
 ```sh
 S=$XDG_RUNTIME_DIR/nebula-guid.sock

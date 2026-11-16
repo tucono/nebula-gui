@@ -7,6 +7,12 @@
 # Docker is needed. A disabled tun still answers ICMP echo, so the dev
 # service can ping alice and bob over the overlay.
 #
+# To reach the lab from a VM, set LAB_HOST to this machine's address on the
+# VM's network (for example its bridge address) when running up:
+#   LAB_HOST=10.0.2.2 testlab/lab.sh up
+# The nodes then listen there instead, and the dev config points at it.
+# Run down first if the lab is already up on another address.
+#
 #   lab.sh up              build nebula, create the PKI and configs, start the nodes
 #   lab.sh down            stop the nodes
 #   lab.sh status          show which nodes are running
@@ -17,9 +23,9 @@
 # Everything generated (pki/, run/, dev/) is gitignored. Never commit it.
 #
 # Overlay 192.168.100.0/24:
-#   lighthouse 192.168.100.1   127.0.0.1:4301
-#   alice      192.168.100.10  127.0.0.1:4302
-#   bob        192.168.100.11  127.0.0.1:4303
+#   lighthouse 192.168.100.1   LAB_HOST:4301
+#   alice      192.168.100.10  LAB_HOST:4302
+#   bob        192.168.100.11  LAB_HOST:4303
 #   dev        192.168.100.20  (the nebula-guid under test, real tun)
 
 set -euo pipefail
@@ -33,6 +39,7 @@ BIN="$RUN/bin"
 NODES="lighthouse alice bob"
 LH_IP=192.168.100.1
 LH_PORT=4301
+LAB_HOST=${LAB_HOST:-127.0.0.1}
 
 # No associative arrays: macOS ships bash 3.2.
 ip_of() {
@@ -101,7 +108,7 @@ pki:
   cert: $PKI/$n.crt
   key: $PKI/$n.key
 listen:
-  host: 127.0.0.1
+  host: $LAB_HOST
   port: $(port_of "$n")
 tun:
   disabled: true
@@ -113,7 +120,7 @@ EOF
 		else
 			cat <<EOF
 static_host_map:
-  "$LH_IP": ["127.0.0.1:$LH_PORT"]
+  "$LH_IP": ["$LAB_HOST:$LH_PORT"]
 lighthouse:
   hosts:
     - $LH_IP
@@ -130,7 +137,7 @@ indent_file() { sed 's/^/    /' "$1"; }
 dev_rest() {
 	cat <<EOF
 static_host_map:
-  "$LH_IP": ["127.0.0.1:$LH_PORT"]
+  "$LH_IP": ["$LAB_HOST:$LH_PORT"]
 lighthouse:
   hosts:
     - $LH_IP
@@ -262,11 +269,17 @@ down() {
 	done
 }
 
+# listen_host NAME prints the address a node was started on, from its
+# config, so status is right without LAB_HOST set again.
+listen_host() {
+	awk '/^listen:/ { l = 1; next } l && /^  host:/ { print $2; exit } /^[^ ]/ { l = 0 }' "$RUN/$1.yml" 2>/dev/null
+}
+
 status() {
 	local n
 	for n in $NODES; do
 		if running "$n"; then
-			printf '%-11s up    %-15s 127.0.0.1:%s\n' "$n" "$(ip_of "$n")" "$(port_of "$n")"
+			printf '%-11s up    %-15s %s:%s\n' "$n" "$(ip_of "$n")" "$(listen_host "$n")" "$(port_of "$n")"
 		else
 			printf '%-11s down  (see %s)\n' "$n" "$RUN/$n.log"
 		fi
