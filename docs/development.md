@@ -25,7 +25,9 @@ sudo dnf install golang gcc libXcursor-devel libXrandr-devel mesa-libGL-devel li
 ```
 **macOS:** `xcode-select --install`, then `brew install go`.
 
-**Windows:** install Go, then a GCC toolchain from [MSYS2](https://www.msys2.org/) (`pacman -S mingw-w64-ucrt-x86_64-gcc`) and add its `bin` directory to `PATH`. You also need `wintun.dll` from https://www.wintun.net, placed next to the service binary (see [platforms.md](platforms.md#windows)).
+**Windows:** install Go, then a GCC toolchain from [MSYS2](https://www.msys2.org/) (`pacman -S mingw-w64-ucrt-x86_64-gcc`) and add its `bin` directory to `PATH`. You also need the zip from https://www.wintun.net: extract it into `bin\dist\windows\`, so the DLL ends up at `bin\dist\windows\wintun\bin\amd64\wintun.dll` next to the service binary (see [platforms.md](platforms.md#windows)).
+
+In a VM without OpenGL (the GUI says the driver doesn't support it), use Mesa's software renderer: `pacman -S mingw-w64-ucrt-x86_64-mesa`, copy `opengl32.dll`, `libgallium_wgl.dll` and the MSYS2 DLLs they need (`ldd`) next to the built `nebula-gui.exe` (`go run` won't do: Windows loads `opengl32.dll` from the program's directory before `System32`, and `PATH` after it), and set `GALLIUM_DRIVER=llvmpipe`. Mesa's default Direct3D 12 driver crashes on the first draw on a VM's basic display adapter.
 
 ## Repository layout (planned)
 
@@ -92,17 +94,31 @@ NEBULA_GUI_SOCKET=/tmp/nebula-guid.sock go run ./cmd/nebula-gui
 ### Windows (Administrator PowerShell for the service)
 ```powershell
 go build -tags dev -o bin\nebula-guid-dev.exe .\cmd\nebula-guid
-copy path\to\wintun.dll bin\
+Expand-Archive path\to\wintun-*.zip bin\dist\windows   # once
 .\bin\nebula-guid-dev.exe --listen \\.\pipe\nebula-guid-dev --state-dir .dev-state --dev
 # normal PowerShell
 $env:NEBULA_GUI_SOCKET="\\.\pipe\nebula-guid-dev"; go run .\cmd\nebula-gui
 ```
 
+### Windows, as a service
+The release build registers itself with the Service Control Manager; the installer (M4) will run these commands. From an Administrator PowerShell, with Wintun extracted as above:
+```powershell
+go build -o bin\nebula-guid.exe .\cmd\nebula-guid
+net localgroup nebula-gui /add       # the installer creates this group
+.\bin\nebula-guid.exe install --allow-user $env:USERNAME
+sc.exe start nebula-guid
+# normal PowerShell: the GUI uses the installed pipe by default
+go run .\cmd\nebula-gui
+# remove it again (the state directory stays)
+.\bin\nebula-guid.exe uninstall
+```
+`install` points the service at the binary where it is, so don't move or rebuild it while installed: stop the service first. Start, stop and fatal errors go to the Application event log under the source `nebula-guid`; everything else goes to the service's log file.
+
 `--state-dir` is where the service keeps the imported config. It defaults to the installed location (see [architecture.md](architecture.md#service-cmdnebula-guid-internalservice)), so in development point it at the gitignored `.dev-state/`.
 
 `--dev` makes the service:
 - log at debug level to stderr;
-- run in the foreground instead of as a system service;
+- skip the start-up permission check. A release build stops at once, with a message, unless it has `CAP_NET_ADMIN` (Linux), runs as root (macOS) or runs elevated (Windows);
 - give the user who launched it access to the socket or pipe (`$SUDO_USER` on Linux and macOS, the current user on Windows). `--socket-owner` overrides this.
 
 **Release builds don't accept `--dev`.** The flag exists only in binaries built with `-tags dev` (`cmd/nebula-guid/dev_on.go`). The dev binary is named `nebula-guid-dev` so it can't be mistaken for a release build.

@@ -22,7 +22,7 @@
 - **Future:** a NetworkExtension (`NEPacketTunnelProvider`) would remove the need for a root daemon, but it needs Apple entitlements and a different architecture. Treat it like the iOS work.
 
 ## Windows
-- **Tun device:** Nebula uses the **Wintun** driver. `wintun.dll` (matching the CPU architecture) must be in the same directory as `nebula-guid.exe`. It is downloaded from wintun.net and the license allows redistribution.
+- **Tun device:** Nebula uses the **Wintun** driver. Nebula looks for `wintun.dll` (matching the CPU architecture) at `dist\windows\wintun\bin\<arch>\wintun.dll` under the directory of `nebula-guid.exe` (`<arch>` is `amd64`, `arm64` or `x86`), the layout of the zip from wintun.net, and fails to create the adapter if it isn't there. The license allows redistribution.
 - **Service:** a Windows Service running as `LocalSystem`, using `golang.org/x/sys/windows/svc`. The service binary handles `install`, `uninstall`, and `run` subcommands.
 - **IPC:** a named pipe through `github.com/Microsoft/go-winio`, with an explicit security descriptor. Don't use the default, which grants too much.
 - **Firewall:** Nebula's UDP port needs an inbound rule. The installer adds one for `nebula-guid.exe`.

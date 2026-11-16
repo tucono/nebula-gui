@@ -3,16 +3,23 @@
 
 // Command nebula-guid is the privileged service that runs Nebula and serves
 // the API the GUI talks to.
+//
+// With no command it runs in the foreground: that's how systemd and launchd
+// run it, and how it runs during development. On Windows the commands
+// install, uninstall and run register it with the Service Control Manager
+// and run under it.
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/tucono/nebula-gui/internal/ipc"
@@ -23,36 +30,121 @@ import (
 var version = "0.0.0-dev"
 
 func main() {
-	if err := run(); err != nil {
+	err := run(os.Args[1:])
+	switch {
+	case err == nil:
+	case errors.Is(err, flag.ErrHelp):
+		// The flag package has printed the usage.
+	default:
 		fmt.Fprintln(os.Stderr, "nebula-guid:", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	listen := flag.String("listen", ipc.DefaultAddress(), "Unix socket path or Windows named pipe to listen on")
-	owner := flag.String("socket-owner", "", "user given access to the socket or pipe")
-	group := flag.String("socket-group", "", "group given access to the socket or pipe")
-	stateDir := flag.String("state-dir", service.DefaultStateDir(), "directory for the imported config (created 0700)")
-	dev := devFlag()
-	showVersion := flag.Bool("version", false, "print the version and exit")
-	flag.Parse()
+// run dispatches on the command, if there is one.
+func run(args []string) error {
+	cmd, rest, err := splitCommand(args)
+	if err != nil {
+		return err
+	}
+	switch cmd {
+	case "install":
+		return installService(rest)
+	case "uninstall":
+		return uninstallService(rest)
+	case "run":
+		return runService(rest)
+	default:
+		return foreground(rest)
+	}
+}
 
-	if *showVersion {
+// splitCommand separates a leading command from the flags after it. An
+// empty command means none was given: args start with a flag, or are empty.
+func splitCommand(args []string) (cmd string, rest []string, err error) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return "", args, nil
+	}
+	switch args[0] {
+	case "install", "uninstall", "run":
+		return args[0], args[1:], nil
+	}
+	return "", nil, fmt.Errorf("unknown command %q (commands: install, uninstall, run)", args[0])
+}
+
+// options are the flags for running the service, in the foreground or
+// under the SCM.
+type options struct {
+	listen   string
+	owner    string
+	group    string
+	stateDir string
+	dev      bool
+	version  bool
+}
+
+// parseOptions parses the service flags. name is the command, for usage
+// messages.
+func parseOptions(name string, args []string) (*options, error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	o := &options{}
+	fs.StringVar(&o.listen, "listen", ipc.DefaultAddress(), "Unix socket path or Windows named pipe to listen on")
+	fs.StringVar(&o.owner, "socket-owner", "", "user given access to the socket or pipe")
+	fs.StringVar(&o.group, "socket-group", "", "group given access to the socket or pipe")
+	fs.StringVar(&o.stateDir, "state-dir", service.DefaultStateDir(), "directory for the imported config (created 0700)")
+	dev := devFlag(fs)
+	fs.BoolVar(&o.version, "version", false, "print the version and exit")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	if fs.NArg() > 0 {
+		return nil, fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	o.dev = *dev
+	if o.dev && o.owner == "" {
+		o.owner = devSocketOwner()
+	}
+	return o, nil
+}
+
+// foreground runs the service until SIGINT or SIGTERM.
+func foreground(args []string) error {
+	o, err := parseOptions("nebula-guid", args)
+	if err != nil {
+		return err
+	}
+	if o.version {
 		fmt.Println(version)
 		return nil
 	}
+	if err := checkPrivileges(); err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return serve(ctx, o)
+}
 
+// checkPrivileges stops a release build early when it can't create the
+// Nebula interface, with a message that says why, rather than leaving it to
+// fail on the first connect. Dev builds skip it: make dev-service grants
+// the capabilities itself.
+func checkPrivileges() error {
+	if devBuild {
+		return nil
+	}
+	return checkNetAdmin()
+}
+
+// serve runs the service until ctx ends.
+func serve(ctx context.Context, o *options) error {
 	level := slog.LevelInfo
-	if *dev {
+	if o.dev {
 		level = slog.LevelDebug
-		if *owner == "" {
-			*owner = devSocketOwner()
-		}
 	}
 	// The store creates and restricts the state directory, which holds the
 	// log directory too.
-	store, err := service.OpenStore(*stateDir)
+	store, err := service.OpenStore(o.stateDir)
 	if err != nil {
 		return err
 	}
@@ -87,12 +179,9 @@ func run() error {
 		return err
 	}
 
-	l, err := ipc.Listen(*listen, ipc.ListenOptions{Owner: *owner, Group: *group})
+	l, err := ipc.Listen(o.listen, ipc.ListenOptions{Owner: o.owner, Group: o.group})
 	if err != nil {
 		return err
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	return srv.Serve(ctx, l)
 }
