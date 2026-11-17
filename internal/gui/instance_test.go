@@ -68,7 +68,10 @@ func TestInstanceIgnoresOtherMessages(t *testing.T) {
 		}
 		_ = c.SetDeadline(time.Now().Add(5 * time.Second))
 		if _, err := c.Write([]byte(msg)); err != nil {
-			t.Fatal(err)
+			// The copy may hang up before the write finishes, as on
+			// Windows for a message that's too long. That's dropping it.
+			_ = c.Close()
+			continue
 		}
 		if msg == "show" {
 			// No newline: the copy waits for the rest, then gives up.
