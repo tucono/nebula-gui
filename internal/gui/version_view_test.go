@@ -4,16 +4,12 @@
 package gui
 
 import (
-	"net"
-	"os"
-	"syscall"
 	"testing"
 
 	"github.com/tucono/nebula-gui/internal/api"
 )
 
 func TestDescribeVersion(t *testing.T) {
-	refused := &net.OpError{Op: "dial", Net: "unix", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
 	tests := []struct {
 		name     string
 		v        *api.VersionResponse
@@ -22,7 +18,7 @@ func TestDescribeVersion(t *testing.T) {
 		versions bool
 		problem  problemID
 	}{
-		{"unreachable", nil, refused, false, false, probServiceNotRunning},
+		{"unreachable", nil, errRefused, false, false, probServiceNotRunning},
 		{"match", &api.VersionResponse{ServiceVersion: "0.1.0", APIVersion: api.APIVersion}, nil, true, true, ""},
 		{"service newer", &api.VersionResponse{APIVersion: api.APIVersion + 1}, nil, false, true, probAppTooOld},
 		{"service older", &api.VersionResponse{APIVersion: api.APIVersion - 1}, nil, false, true, probServiceTooOld},

@@ -6,11 +6,8 @@ package gui
 import (
 	"context"
 	"errors"
-	"net"
-	"os"
 	"slices"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -41,7 +38,15 @@ func newFakeService() *fakeService {
 	return &fakeService{apiVer: api.APIVersion, instance: "i1", state: api.StateStopped}
 }
 
-var errRefused = &net.OpError{Op: "dial", Net: "unix", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
+// errRefused is a dial to a service that isn't running. Its text is the
+// same on every OS, so golden files match; it unwraps to an errno this OS
+// counts as not running (see connerr_unix.go and connerr_windows.go).
+var errRefused error = refusedError{}
+
+type refusedError struct{}
+
+func (refusedError) Error() string { return "dial unix: connect: connection refused" }
+func (refusedError) Unwrap() error { return notRunningErrnos[0] }
 
 func (f *fakeService) Version(context.Context) (*api.VersionResponse, error) {
 	f.mu.Lock()

@@ -89,7 +89,7 @@ func indent(s string) string {
 func TestInlinePaths(t *testing.T) {
 	raw := `# from the admin
 pki:
-  ca: /etc/nebula/ca.crt   # absolute
+  ca: ` + abs("/etc/nebula/ca.crt") + `   # absolute
   cert: laptop.crt
   key: ~/keys/laptop.key
 lighthouse:
