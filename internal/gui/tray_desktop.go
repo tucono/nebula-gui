@@ -33,3 +33,4 @@ func (t *desktopTray) SetMenu(m *fyne.Menu)    { t.app.SetSystemTrayMenu(m) }
 func (t *desktopTray) SetIcon(r fyne.Resource) { t.app.SetSystemTrayIcon(r) }
 func (t *desktopTray) SetTooltip(s string)     { systray.SetTooltip(s) }
 func (t *desktopTray) SetOnTapped(f func())    { systray.SetOnTapped(func() { fyne.Do(f) }) }
+func (t *desktopTray) Available() bool         { return hasTray() }

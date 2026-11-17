@@ -71,12 +71,14 @@ type fakeTray struct {
 	tooltip string
 	tapped  func()
 	menus   int
+	gone    bool
 }
 
 func (f *fakeTray) SetMenu(m *fyne.Menu)    { f.menu = m; f.menus++ }
 func (f *fakeTray) SetIcon(r fyne.Resource) { f.icon = r }
 func (f *fakeTray) SetTooltip(s string)     { f.tooltip = s }
 func (f *fakeTray) SetOnTapped(fn func())   { f.tapped = fn }
+func (f *fakeTray) Available() bool         { return !f.gone }
 
 // labels lists the menu's items, with "-" for a separator and a trailing
 // " (off)" for a disabled item.
@@ -224,6 +226,24 @@ func TestMainWindowHideToTray(t *testing.T) {
 	}
 }
 
+func TestMainWindowTrayGone(t *testing.T) {
+	m, tray, poll := trayWindow(t, newFakeService())
+	quits := 0
+	m.exit = func() { quits++ }
+	poll()
+
+	// The tray's applet was removed after start-up: closing quits instead
+	// of hiding the window where nothing can bring it back.
+	tray.gone = true
+	test.AssertNotificationSent(t, nil, m.hideToTray)
+	if quits != 1 || m.hidden {
+		t.Fatalf("quits %d, hidden %v", quits, m.hidden)
+	}
+	if !slices.Contains(msgs(m.log), "tray gone: closing the window quits") {
+		t.Fatalf("log %v", msgs(m.log))
+	}
+}
+
 func TestMainWindowQuit(t *testing.T) {
 	svc := newFakeService()
 	m, _, poll := trayWindow(t, svc)
@@ -247,6 +267,16 @@ func TestMainWindowQuit(t *testing.T) {
 	}
 	if label(t, m.w.Canvas().Overlays().Top(), "The connection stays on. Disconnect first if you want it off.") == nil {
 		t.Fatal("no notice")
+	}
+
+	// Cancel: stays, and asks again next time.
+	test.Tap(button(t, m.w.Canvas().Overlays().Top(), "Cancel"))
+	if quits != 1 || m.a.Preferences().Bool(prefQuitNotice) {
+		t.Fatalf("after Cancel: quits %d, notice saved %v", quits, m.a.Preferences().Bool(prefQuitNotice))
+	}
+	m.quit()
+	if m.w.Canvas().Overlays().Top() == nil {
+		t.Fatal("didn't ask again after Cancel")
 	}
 	test.Tap(button(t, m.w.Canvas().Overlays().Top(), "Quit"))
 	if quits != 2 {

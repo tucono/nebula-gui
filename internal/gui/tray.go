@@ -94,6 +94,9 @@ type trayHost interface {
 	// SetOnTapped is called for a left click on the icon, on the UI
 	// goroutine.
 	SetOnTapped(func())
+	// Available reports whether the tray is still there. It can go away
+	// while the app runs, for example when its panel applet is removed.
+	Available() bool
 }
 
 // attachTray puts the app in the tray: closing the window hides it there.
@@ -156,8 +159,14 @@ func (m *mainWindow) showWindow() {
 }
 
 // hideToTray is what closing the window does while there's a tray. The
-// first time, a notification says where the app went.
+// first time, a notification says where the app went. If the tray has
+// gone since start-up, the window couldn't be brought back, so it quits.
 func (m *mainWindow) hideToTray() {
+	if !m.tray.Available() {
+		m.log.Add("tray gone: closing the window quits")
+		m.exit()
+		return
+	}
 	m.w.Hide()
 	m.setHidden(true)
 	m.log.Add("window hidden in the tray")
@@ -176,21 +185,27 @@ func (m *mainWindow) setHidden(on bool) {
 }
 
 // quit quits the app, from the tray or File → Quit. The connection stays
-// up; the first time that matters, it says so and asks first.
+// up; until someone has quit through the notice saying so, it asks first.
+// Cancelling, or the app ending another way, leaves it to ask next time.
 func (m *mainWindow) quit() {
 	p := m.a.Preferences()
 	connected := m.in.Status != nil && m.in.Status.State == api.StateRunning
 	if !connected || p.Bool(prefQuitNotice) {
+		m.log.Add("quit")
 		m.exit()
 		return
 	}
-	p.SetBool(prefQuitNotice, true)
 	m.showWindow()
+	m.log.Add("quit notice shown")
 	d := dialog.NewConfirm("Quit "+appName+"?", "The connection stays on. Disconnect first if you want it off.",
 		func(ok bool) {
-			if ok {
-				m.exit()
+			if !ok {
+				m.log.Add("quit cancelled")
+				return
 			}
+			p.SetBool(prefQuitNotice, true)
+			m.log.Add("quit")
+			m.exit()
 		}, m.w)
 	d.SetConfirmText("Quit")
 	d.SetDismissText("Cancel")
