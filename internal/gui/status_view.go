@@ -68,6 +68,8 @@ type statusInput struct {
 	Acting action
 	// Peers is Nebula's latest peer list, nil before it's known.
 	Peers []api.Peer
+	// Setup is what's known about the installed service while Err is set.
+	Setup serviceSetup
 	Now   time.Time
 	GOOS  string
 }
@@ -101,7 +103,7 @@ type statusView struct {
 func describeStatus(in statusInput) statusView {
 	switch {
 	case in.Err != nil:
-		return statusView{Banner: problemFor(in.Err, problemContext{GOOS: in.GOOS})}
+		return statusView{Banner: problemFor(in.Err, problemContext{GOOS: in.GOOS, Setup: in.Setup})}
 	case in.Version != nil:
 		return statusView{Banner: in.Version}
 	case in.Status == nil:

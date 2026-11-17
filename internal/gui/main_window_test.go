@@ -22,6 +22,10 @@ func testWindow(t *testing.T, svc *fakeService) (*mainWindow, func()) {
 	m.spawn = func(f func()) { f() }
 	m.nativeOpen = nil // never open the desktop's real picker from a test
 	m.peers.after = func(time.Duration, func()) {}
+	m.startSvc = func(context.Context) error {
+		t.Error("asked the OS to start the service")
+		return nil
+	}
 	t.Cleanup(func() {
 		m.close()
 		m.w.Close()

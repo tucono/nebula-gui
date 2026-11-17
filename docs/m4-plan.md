@@ -245,7 +245,7 @@ Release URLs must work without signing in, which GitHub release assets on a publ
 
 **Files:** `internal/gui/problems.go`, `connerr_*.go` and tests.
 
-- **Not installed** vs **not running**: the GUI checks for the service's files (`/usr/libexec/nebula-gui/nebula-guid`, the launchd plist, the Windows service) to tell them apart. Not installed points to the download page; not running gives the platform's way to start it, with a **Start the service** button where the OS can ask for the password itself (`pkexec systemctl start nebula-guid` on Linux, an elevated `sc start` on Windows).
+- **Not installed** vs **not running**: the GUI checks for the service's files (`/usr/libexec/nebula-gui/nebula-guid`, the launchd plist, the Windows service) to tell them apart. Not installed points to the download page; not running gives the platform's way to start it, with a **Start the service** button where the OS can ask for the password itself (`systemctl start nebula-guid` on Linux, an elevated `sc start` on Windows). On Linux systemd asks polkit, which has the desktop ask for the password and allows only starting units; `pkexec` would run a whole program as root. If that fails (no polkit agent, say), a dialog gives `sudo systemctl start nebula-guid` instead. macOS gets the `launchctl kickstart` command, not a button.
 - **Signed out needed** for the group, as above.
 
 ### 7. Linux package

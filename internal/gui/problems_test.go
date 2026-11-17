@@ -24,10 +24,13 @@ func catalogue() []*problem {
 	day := time.Date(2027, 3, 3, 12, 0, 0, 0, time.Local)
 	var out []*problem
 	for _, goos := range []string{"linux", "darwin", "windows"} {
-		out = append(out, noPermission(goos), tunUnavailable(goos))
+		out = append(out, noPermission(goos), tunUnavailable(goos), startFailed(goos, "exit status 1"))
+		for _, s := range setups {
+			out = append(out, serviceNotRunning(goos, s))
+		}
 	}
 	return append(out,
-		serviceNotRunning(), serviceNotResponding(),
+		serviceNotInstalled(), signOutNeeded(), serviceNotResponding(),
 		serviceTooOld(0, 1), appTooOld(2, 1),
 		noConfig(), notAConfig("notes.txt"),
 		fileMissing("key", "laptop.key"), fileUnreadable("key", "laptop.key"),
@@ -42,9 +45,17 @@ func catalogue() []*problem {
 	)
 }
 
+// setups are the states of the installed service the problems tell apart.
+var setups = []serviceSetup{
+	{},
+	{Known: true},
+	{Known: true, Installed: true},
+	{Known: true, Installed: true, CanStart: true},
+}
+
 // allIDs lists every catalogue entry.
 var allIDs = []problemID{
-	probServiceNotRunning, probNoPermission, probServiceNotResponding, probServiceTooOld, probAppTooOld,
+	probServiceNotRunning, probServiceNotInstalled, probStartFailed, probNoPermission, probSignOutNeeded, probServiceNotResponding, probServiceTooOld, probAppTooOld,
 	probNoConfig, probNotAConfig, probFileMissing, probFileUnreadable, probFileNotPEM, probPKIMissing,
 	probSSHDEnabled, probCertExpired, probCAExpired, probKeyMismatch, probWrongCA, probKeyEncrypted,
 	probConfigTooLarge, probConfigProblem,

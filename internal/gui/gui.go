@@ -28,6 +28,10 @@ type Options struct {
 	// Hidden starts the app in the tray without showing the window, for
 	// starting at sign-in. Without a tray the window shows anyway.
 	Hidden bool
+	// OtherAddress is set when Client doesn't use the installed service's
+	// address, so the installed service says nothing about why it can't
+	// be reached.
+	OtherAddress bool
 }
 
 // Run opens the main window and blocks until the app quits.
@@ -60,6 +64,9 @@ func Run(opts Options) {
 	}
 	if p, err := defaultPeerStorePath(); err == nil {
 		m.saved = openPeerStore(p)
+	}
+	if !opts.OtherAddress {
+		m.poller.probe = probeSetup
 	}
 	m.start()
 	if inst != nil {

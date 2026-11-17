@@ -104,7 +104,7 @@ func TestProblemView(t *testing.T) {
 func TestProblemViewWithoutHandlers(t *testing.T) {
 	test.NewTempApp(t)
 	v := newProblemView(problemHandlers{})
-	v.Set(serviceNotRunning())
+	v.Set(serviceNotRunning("linux", serviceSetup{}))
 	if button(t, v.Object(), "Try again") != nil || button(t, v.Object(), "Get help…") != nil {
 		t.Fatal("buttons shown without handlers")
 	}
@@ -166,18 +166,32 @@ func TestProblemViewDismissAndSupports(t *testing.T) {
 func TestProblemViewSetSame(t *testing.T) {
 	test.NewTempApp(t)
 	v := newProblemView(problemHandlers{})
-	v.Set(serviceNotRunning())
+	v.Set(serviceNotRunning("linux", serviceSetup{}))
 	before := v.box.Objects[0]
 	// The poller sets an equal problem every few seconds; rebuilding
 	// would close the Details section the user opened.
-	v.Set(serviceNotRunning())
+	v.Set(serviceNotRunning("linux", serviceSetup{}))
 	if v.box.Objects[0] != before {
 		t.Fatal("rebuilt for an equal problem")
 	}
-	p := serviceNotRunning()
+	p := serviceNotRunning("linux", serviceSetup{})
 	p.Details = "different"
 	v.Set(p)
 	if v.box.Objects[0] == before {
 		t.Fatal("not rebuilt for new details")
+	}
+}
+
+func TestProblemViewSetNewFix(t *testing.T) {
+	test.NewTempApp(t)
+	v := newProblemView(problemHandlers{OnFix: func(fixAction) {}})
+	v.Set(serviceNotRunning("linux", serviceSetup{Known: true, Installed: true}))
+	if button(t, v.Object(), "Start the service") != nil {
+		t.Fatal("Start the service shown without a way to start it")
+	}
+	// The same title and explanation, but now the app can start it.
+	v.Set(serviceNotRunning("linux", serviceSetup{Known: true, Installed: true, CanStart: true}))
+	if button(t, v.Object(), "Start the service") == nil {
+		t.Fatal("not rebuilt for a new fix")
 	}
 }

@@ -13,18 +13,21 @@ import (
 
 // fromTransportError turns an error that never reached the service's error
 // handling (the dial failed, the request timed out, the connection broke)
-// into a catalogue entry. The errno lists live in connerr_unix.go and
+// into a catalogue entry, using what pc.Setup says about the installed
+// service. The errno lists live in connerr_unix.go and
 // connerr_windows.go.
-func fromTransportError(err error, goos string) *problem {
+func fromTransportError(err error, pc problemContext) *problem {
 	switch {
 	case isTimeout(err):
 		return serviceNotResponding()
+	case errnoIn(err, permissionErrnos) && pc.Setup.GroupPending:
+		return signOutNeeded()
 	case errnoIn(err, permissionErrnos):
-		return noPermission(goos)
+		return noPermission(pc.GOOS)
 	case errnoIn(err, notRunningErrnos),
 		errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		// A connection that breaks mid-request means the service stopped.
-		return serviceNotRunning()
+		return serviceNotRunning(pc.GOOS, pc.Setup)
 	default:
 		// Anything else (a garbled response, say) is still a service that
 		// didn't give a usable answer, and Try again is the right advice.

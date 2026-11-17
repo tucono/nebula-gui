@@ -5,6 +5,7 @@ package gui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -61,6 +62,10 @@ type mainWindow struct {
 	readFile func(string) ([]byte, error)
 	// exit quits the app. Tests replace it.
 	exit func()
+	// startSvc asks the OS to start the service. Tests replace it.
+	startSvc func(context.Context) error
+	// starting is set while it does.
+	starting bool
 
 	in         statusInput
 	version    *api.VersionResponse
@@ -133,6 +138,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		spawn:      func(f func()) { go f() },
 		readFile:   readCapped,
 		exit:       a.Quit,
+		startSvc:   startService,
 		nativeOpen: platformOpen,
 		in:         statusInput{GOOS: runtime.GOOS},
 	}
@@ -288,6 +294,7 @@ func (m *mainWindow) applyPoll(r pollResult) {
 		switch {
 		case r.Err != nil:
 			m.in.Err, m.in.Status, m.in.Peers = r.Err, nil, nil
+			m.in.Setup = r.Setup
 		case r.Status != nil:
 			m.applyStatus(r.Status)
 			if r.PeersUpdated {
@@ -453,7 +460,7 @@ func setEnabled(b *widget.Button, on bool) {
 // an import are in its dialog (importFixes).
 func supportedFix(k fixKind) bool {
 	switch k {
-	case fixRetry, fixOpenDownloads, fixConnect, fixReconnect, fixImport:
+	case fixRetry, fixOpenDownloads, fixConnect, fixReconnect, fixImport, fixStartService:
 		return true
 	default:
 		return false
@@ -473,7 +480,47 @@ func (m *mainWindow) fix(f fixAction) {
 		m.act(actReconnect)
 	case fixImport:
 		m.importConfig()
+	case fixStartService:
+		m.startService()
 	}
+}
+
+// startTimeout is how long the OS has to start the service, including the
+// time the user takes to type a password.
+const startTimeout = 2 * time.Minute
+
+// startService asks the OS to start the service, off the UI goroutine.
+// The poller notices when it's up; on Windows sc returns before then, so
+// it looks again shortly after. A refusal is only logged: the banner still
+// offers the button.
+func (m *mainWindow) startService() {
+	if m.starting {
+		return
+	}
+	m.starting = true
+	m.log.Add("start the service clicked")
+	m.spawn(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
+		defer cancel()
+		err := m.startSvc(ctx)
+		fyne.Do(func() {
+			m.starting = false
+			switch {
+			case err == nil:
+				m.log.Add("service start requested")
+				time.AfterFunc(2*time.Second, m.poller.Poke)
+			case errors.Is(err, errStartCancelled):
+				m.log.Add("service start not allowed", "error", err.Error())
+			default:
+				m.log.Add("couldn't start the service", "error", err.Error())
+				showProblemDialog(m.w, startFailed(m.in.GOOS, err.Error()), problemHandlers{
+					OnHelp:   m.openHelp,
+					Versions: m.versionsLine,
+				})
+			}
+			m.poller.Poke()
+		})
+	})
 }
 
 // confirmRemove asks before deleting the stored config.
@@ -528,7 +575,7 @@ func (m *mainWindow) actFrom(a action, fromTray bool) {
 		fyne.Do(func() {
 			m.in.Acting = actNone
 			if err != nil {
-				p := problemFor(err, problemContext{Op: a.op(), Cert: cert, GOOS: m.in.GOOS})
+				p := problemFor(err, problemContext{Op: a.op(), Cert: cert, Setup: m.in.Setup, GOOS: m.in.GOOS})
 				p.Dismiss = true
 				m.in.Action = p
 				m.log.Add(a.String()+" failed", "problem", string(p.ID), "error", errorDetails(err))

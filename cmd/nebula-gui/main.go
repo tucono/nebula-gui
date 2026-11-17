@@ -24,8 +24,9 @@ func main() {
 	hidden := flag.Bool("hidden", false, "start in the tray without showing the window (used at sign-in)")
 	flag.Parse()
 	addr := os.Getenv(socketEnv)
-	if addr == "" {
+	other := addr != ""
+	if !other {
 		addr = ipc.DefaultAddress()
 	}
-	gui.Run(gui.Options{Client: api.NewClient(addr), AppVersion: version, Hidden: *hidden})
+	gui.Run(gui.Options{Client: api.NewClient(addr), AppVersion: version, Hidden: *hidden, OtherAddress: other})
 }

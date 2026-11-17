@@ -5,6 +5,7 @@ package gui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -134,7 +135,15 @@ func sameProblem(a, b *problem) bool {
 		return a == b
 	}
 	return a.ID == b.ID && a.Title == b.Title && a.Explain == b.Explain &&
-		a.Details == b.Details && a.Dismiss == b.Dismiss
+		slices.Equal(a.Steps, b.Steps) && a.Command == b.Command &&
+		sameFix(a.Fix, b.Fix) && a.Details == b.Details && a.Dismiss == b.Dismiss
+}
+
+func sameFix(a, b *fixAction) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 func wrapped(s string) *widget.Label {

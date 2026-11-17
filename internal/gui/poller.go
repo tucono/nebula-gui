@@ -54,6 +54,8 @@ type pollResult struct {
 	Version *api.VersionResponse
 	Status  *api.StatusResponse
 	Err     error
+	// Setup is what's known about the installed service, set with Err.
+	Setup serviceSetup
 	// PeersUpdated says Peers is a fresh list: read this round while
 	// Nebula runs, or empty because it doesn't. When it's false, the
 	// previous list still stands.
@@ -85,6 +87,9 @@ type poller struct {
 	gate *statusGate
 	wake chan struct{}
 	now  func() time.Time
+	// probe looks at the installed service when it can't be reached; nil
+	// when the app uses another address, which it says nothing about.
+	probe func() serviceSetup
 
 	peersFast atomic.Bool
 	peersNow  atomic.Bool // Poke asked for fresh peers
@@ -271,9 +276,12 @@ func (p *poller) status(ctx context.Context) (*api.StatusResponse, error) {
 
 // failed records an unreachable service and backs off.
 func (p *poller) failed(r pollResult, err error) (pollResult, time.Duration) {
+	if p.probe != nil {
+		r.Setup = p.probe()
+	}
 	if p.reach != reachDown {
 		p.reach = reachDown
-		p.log.Add("service unreachable", "problem", string(problemFor(err, problemContext{}).ID), "error", err.Error())
+		p.log.Add("service unreachable", "problem", string(problemFor(err, problemContext{Setup: r.Setup}).ID), "error", err.Error())
 	}
 	// Check the version again once it answers: it may be a new service.
 	p.versionOK = false

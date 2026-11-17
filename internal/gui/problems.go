@@ -44,7 +44,10 @@ type problemID string
 const (
 	// Reaching the service.
 	probServiceNotRunning    problemID = "service_not_running"
+	probServiceNotInstalled  problemID = "service_not_installed"
+	probStartFailed          problemID = "start_failed"
 	probNoPermission         problemID = "no_permission"
+	probSignOutNeeded        problemID = "sign_out_needed"
 	probServiceNotResponding problemID = "service_not_responding"
 	probServiceTooOld        problemID = "service_too_old"
 	probAppTooOld            problemID = "app_too_old"
@@ -100,6 +103,7 @@ const (
 	fixDisableSSHD                      // turn sshd off and import again
 	fixConnect                          // connect again
 	fixReconnect                        // disconnect, then connect
+	fixStartService                     // have the OS start the service
 )
 
 // downloadURL is the public releases page. It needs no sign-in.
@@ -110,16 +114,83 @@ const contact = "the person who set up your network"
 
 // --- Reaching the service ---
 
-func serviceNotRunning() *problem {
-	return &problem{
-		ID:      probServiceNotRunning,
-		Title:   "The background service isn't running",
-		Explain: "The Nebula service runs in the background and needs to be running for this app to work.",
-		Steps: []string{
+// serviceNotRunning takes what the app could tell about the installed
+// service: whether it's there, and whether the app can start it.
+func serviceNotRunning(goos string, s serviceSetup) *problem {
+	p := &problem{
+		ID:    probServiceNotRunning,
+		Title: "The background service isn't running",
+		Fix:   &fixAction{Label: "Try again", Kind: fixRetry},
+	}
+	if !s.Known {
+		p.Explain = "The Nebula service runs in the background and needs to be running for this app to work."
+		p.Steps = []string{
 			"Restart your computer.",
 			"If this keeps happening, reinstall the app.",
+		}
+		return p
+	}
+	if !s.Installed {
+		return serviceNotInstalled()
+	}
+	p.Explain = "It's installed, but it has stopped. It normally starts with your computer."
+	again := "If it stops again, click Get help…."
+	switch {
+	case s.CanStart && goos == "windows":
+		p.Steps = []string{"Click Start the service, then allow it when Windows asks.", again}
+		p.Fix = &fixAction{Label: "Start the service", Kind: fixStartService}
+	case s.CanStart:
+		p.Steps = []string{"Click Start the service, then enter your password if you're asked for it.", again}
+		p.Fix = &fixAction{Label: "Start the service", Kind: fixStartService}
+	case goos == "darwin":
+		p.Steps = []string{"Run the command below in Terminal, or restart your computer.", again}
+		p.Command = "sudo launchctl kickstart system/" + darwinServiceLabel
+	default:
+		p.Steps = []string{"Restart your computer.", again}
+	}
+	return p
+}
+
+func serviceNotInstalled() *problem {
+	return &problem{
+		ID:      probServiceNotInstalled,
+		Title:   "The background service isn't installed",
+		Explain: "This app needs the Nebula service that's installed with it, and it isn't on this computer.",
+		Steps:   []string{"Download the installer for your computer and run it."},
+		Fix:     &fixAction{Label: "Open download page", Kind: fixOpenDownloads},
+	}
+}
+
+// startFailed is shown in a dialog when Start the service didn't work.
+// details is what the OS said.
+func startFailed(goos, details string) *problem {
+	p := &problem{
+		ID:      probStartFailed,
+		Title:   "Couldn't start the background service",
+		Explain: "Your computer didn't start it.",
+		Steps:   []string{"Restart your computer.", "If it still doesn't start, click Get help…."},
+		Details: details,
+	}
+	if goos == "linux" {
+		p.Steps[0] = "Run the command below in a terminal, or restart your computer."
+		p.Command = "sudo systemctl start " + linuxServiceUnit
+	}
+	return p
+}
+
+// signOutNeeded replaces noPermission when the user has been added to the
+// nebula-gui group since signing in: the group only applies to programs
+// started after the next sign-in.
+func signOutNeeded() *problem {
+	return &problem{
+		ID:      probSignOutNeeded,
+		Info:    true,
+		Title:   "Sign out and back in to finish",
+		Explain: "Your account has been given access to Nebula on this computer. It takes effect the next time you sign in.",
+		Steps: []string{
+			"Save your work, then sign out and back in.",
+			"If this still shows afterwards, restart your computer.",
 		},
-		Fix: &fixAction{Label: "Try again", Kind: fixRetry},
 	}
 }
 
@@ -468,7 +539,10 @@ type problemContext struct {
 	KeyName, CertName string
 	// Cert gives the expiry dates for cert_expired and ca_expired.
 	Cert *api.CertInfo
-	GOOS string
+	// Setup is what's known about the installed service, for the problems
+	// shown when it can't be reached.
+	Setup serviceSetup
+	GOOS  string
 }
 
 // problemFor turns any error from an api.Client call into a catalogue
@@ -486,7 +560,7 @@ func problemFor(err error, pc problemContext) *problem {
 	if errors.As(err, &ae) {
 		p = fromAPIError(ae, pc)
 	} else {
-		p = fromTransportError(err, pc.GOOS)
+		p = fromTransportError(err, pc)
 	}
 	p.Details = joinDetails(p.Details, errorDetails(err))
 	return p
