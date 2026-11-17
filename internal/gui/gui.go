@@ -6,6 +6,7 @@
 package gui
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -30,6 +31,12 @@ type Options struct {
 
 // Run opens the main window and blocks until the app quits.
 func Run(opts Options) {
+	inst, instErr := claimDefaultInstance(!opts.Hidden)
+	if errors.Is(instErr, errAlreadyRunning) {
+		fmt.Fprintln(os.Stderr, "nebula-gui: already running")
+		return
+	}
+
 	log := newAppLog()
 	if dir, err := defaultAppLogDir(); err == nil {
 		if l, err := openAppLog(dir); err != nil {
@@ -40,6 +47,9 @@ func Run(opts Options) {
 	}
 	defer func() { _ = log.Close() }()
 	log.Add("app started", "version", opts.AppVersion, "os", runtime.GOOS+"/"+runtime.GOARCH)
+	if instErr != nil {
+		log.Add("can't check for another copy", "error", instErr.Error())
+	}
 
 	a := app.NewWithID(appID)
 	a.SetIcon(appIcon)
@@ -51,6 +61,14 @@ func Run(opts Options) {
 		m.saved = openPeerStore(p)
 	}
 	m.start()
+	if inst != nil {
+		go inst.serve(func() {
+			fyne.Do(func() {
+				m.log.Add("another copy asked to show the window")
+				m.showWindow()
+			})
+		})
+	}
 	if t := newDesktopTray(a); t != nil {
 		m.attachTray(t)
 	} else {
@@ -63,8 +81,20 @@ func Run(opts Options) {
 	} else {
 		m.w.ShowAndRun()
 	}
+	if inst != nil {
+		_ = inst.Close()
+	}
 	m.close()
 	log.Add("app closed")
+}
+
+// claimDefaultInstance claims this user's instance address.
+func claimDefaultInstance(show bool) (*instance, error) {
+	addr, err := defaultInstanceAddr()
+	if err != nil {
+		return nil, err
+	}
+	return claimInstance(addr, show)
 }
 
 // openDownloads opens the public releases page in the browser.
