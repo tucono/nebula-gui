@@ -14,6 +14,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// windowsService is the service's name in the Service Control Manager.
+const windowsService = "nebula-guid"
+
 // probeSetup asks the Service Control Manager whether the service is
 // registered. Both calls need only the rights every user has.
 func probeSetup() serviceSetup {
@@ -53,7 +56,7 @@ func startService(context.Context) error {
 	args, _ := windows.UTF16PtrFromString("start " + windowsService)
 	err = windows.ShellExecute(0, verb, file, args, nil, windows.SW_HIDE)
 	if errors.Is(err, windows.ERROR_CANCELLED) {
-		return fmt.Errorf("%w: %v", errStartCancelled, err)
+		return fmt.Errorf("%w: %w", errStartCancelled, err)
 	}
 	if err != nil {
 		return fmt.Errorf("sc start %s: %w", windowsService, err)

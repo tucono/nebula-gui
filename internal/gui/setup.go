@@ -15,9 +15,6 @@ import (
 const (
 	linuxServiceUnit   = "nebula-guid"
 	darwinServiceLabel = "io.github.tucono.nebula-guid"
-	windowsService     = "nebula-guid"
-	// accessGroup is the group allowed to use the service.
-	accessGroup = "nebula-gui"
 )
 
 // serviceSetup is what the app can tell about the installed service while

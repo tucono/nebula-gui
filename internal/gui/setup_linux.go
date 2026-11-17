@@ -19,6 +19,8 @@ const (
 	linuxServiceExe = "/usr/libexec/nebula-gui/nebula-guid"
 	// systemdRunDir exists while systemd is the init system.
 	systemdRunDir = "/run/systemd/system"
+	// accessGroup is the group allowed to use the service.
+	accessGroup = "nebula-gui"
 )
 
 func probeSetup() serviceSetup {
