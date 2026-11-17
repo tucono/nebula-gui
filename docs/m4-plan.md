@@ -186,6 +186,7 @@ On Linux, the GUI's **no permission** problem already gives the command. It gain
 - **wintun.dll** is downloaded in CI from wintun.net at a pinned version and checked against a SHA-256 in `packaging/windows/wintun.sha256`. It's never committed.
 - **Windows firewall:** an inbound UDP rule for `nebula-guid.exe` on any port (the port comes from the config), added and removed by the installer.
 - **The macOS app bundle** is built on the macOS runner, as a universal binary (`lipo` of amd64 and arm64). The service cross-compiles; the GUI needs CGO, so each arch is built natively or with the SDK's `-arch` flags.
+- **The Windows GUI** is linked with `-ldflags -H=windowsgui`, so neither the Start Menu shortcut nor start at sign-in opens a console window next to it.
 - **Icons:** one app icon (SVG source plus PNG and ICO/ICNS sizes) and three tray icons (on, off, attention) in `internal/gui/assets/`, embedded with `go:embed`. Tray icons are monochrome templates on macOS.
 - **Version:** packages take their version from the tag (`v0.1.0` → `0.1.0`). Builds from untagged commits get `0.0.0~dev.<n>.<hash>` and aren't released.
 
