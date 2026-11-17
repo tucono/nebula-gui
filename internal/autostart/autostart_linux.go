@@ -8,12 +8,15 @@ package autostart
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // desktopFile is ~/.config/autostart/nebula-gui.desktop, which desktops
@@ -21,6 +24,8 @@ import (
 type desktopFile struct {
 	path string
 	exe  string
+	// reload tells the desktop the file changed; nil in tests.
+	reload func()
 }
 
 func newEntry(exe string) (Entry, error) {
@@ -28,7 +33,11 @@ func newEntry(exe string) (Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &desktopFile{path: filepath.Join(dir, "autostart", "nebula-gui.desktop"), exe: exe}, nil
+	return &desktopFile{
+		path:   filepath.Join(dir, "autostart", "nebula-gui.desktop"),
+		exe:    exe,
+		reload: reloadUserManager,
+	}, nil
 }
 
 // Enabled reports whether the file exists and isn't turned off inside, as
@@ -45,6 +54,14 @@ func (d *desktopFile) Enabled() (bool, error) {
 }
 
 func (d *desktopFile) SetEnabled(on bool) error {
+	err := d.write(on)
+	if err == nil && d.reload != nil {
+		d.reload()
+	}
+	return err
+}
+
+func (d *desktopFile) write(on bool) error {
 	if !on {
 		return removeFile(d.path)
 	}
@@ -59,6 +76,23 @@ Comment=Starts nebula-gui in the tray
 Exec=%s %s
 Terminal=false
 `, exec, HiddenFlag)))
+}
+
+// reloadUserManager has systemd's user manager read the autostart files
+// again. Desktops that start them through systemd (COSMIC, GNOME, KDE)
+// turn each file into a unit only when the manager starts or reloads, and
+// the manager often outlives signing out, so a new file would be missed
+// and a removed one still run. It's done in the background; without
+// systemd there's nothing to do.
+func reloadUserManager() {
+	if _, err := os.Stat("/run/systemd/system"); err != nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = exec.CommandContext(ctx, "systemctl", "--user", "daemon-reload").Run()
+	}()
 }
 
 // turnedOff reports whether a desktop entry says not to run it: Hidden=true

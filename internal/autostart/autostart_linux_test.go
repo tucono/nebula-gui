@@ -21,6 +21,7 @@ func testEntry(t *testing.T, exe string) (Entry, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.(*desktopFile).reload = nil // never reload the real user manager
 	return e, filepath.Join(dir, "autostart", "nebula-gui.desktop")
 }
 
@@ -71,6 +72,20 @@ func TestDesktopFileOnAndOff(t *testing.T) {
 	}
 	if err := e.SetEnabled(false); err != nil {
 		t.Fatalf("turning off twice: %v", err)
+	}
+}
+
+func TestDesktopFileReloads(t *testing.T) {
+	e, _ := testEntry(t, "/usr/bin/nebula-gui")
+	reloads := 0
+	e.(*desktopFile).reload = func() { reloads++ }
+	for _, on := range []bool{true, false} {
+		if err := e.SetEnabled(on); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if reloads != 2 {
+		t.Fatalf("%d reloads, want one per change", reloads)
 	}
 }
 
