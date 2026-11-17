@@ -55,6 +55,8 @@ type mainWindow struct {
 	spawn func(func())
 	// readFile reads the files a config refers to. Tests replace it.
 	readFile func(string) ([]byte, error)
+	// exit quits the app. Tests replace it.
+	exit func()
 
 	in         statusInput
 	version    *api.VersionResponse
@@ -81,6 +83,14 @@ type mainWindow struct {
 	help *helpDialog
 	// addPeerD is the open Add peer dialog, or nil.
 	addPeerD *addPeerDialog
+
+	// tray is the desktop's tray, or nil without one. trayLast is what it
+	// shows, applied trayApplied times.
+	tray        trayHost
+	trayLast    trayView
+	trayApplied int
+	// hidden is set while the window is hidden in the tray.
+	hidden bool
 
 	// picker is the open Fyne file picker, kept the size of the window.
 	picker *dialog.FileDialog
@@ -112,6 +122,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		appVersion: appVersion,
 		spawn:      func(f func()) { go f() },
 		readFile:   readCapped,
+		exit:       a.Quit,
 		nativeOpen: platformOpen,
 		in:         statusInput{GOOS: runtime.GOOS},
 	}
@@ -195,7 +206,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 // wrong without a problem being shown. Quit is set explicitly: Fyne adds
 // one to the first menu otherwise, which would put it under Help.
 func (m *mainWindow) mainMenu() *fyne.MainMenu {
-	quit := fyne.NewMenuItem("Quit", func() { m.a.Quit() })
+	quit := fyne.NewMenuItem("Quit", m.quit)
 	quit.IsQuit = true
 	return fyne.NewMainMenu(
 		fyne.NewMenu("File", quit),
@@ -337,6 +348,7 @@ func (m *mainWindow) render() {
 	m.footer.Refresh()
 
 	m.renderPeers()
+	m.renderTray()
 }
 
 func (m *mainWindow) footerText() string {
@@ -475,7 +487,11 @@ func (m *mainWindow) dismiss(*problem) {
 // act runs a Connect or Disconnect off the UI goroutine. The button stays
 // disabled until it returns; polling goes on meanwhile, so the header can
 // show "Disconnecting…".
-func (m *mainWindow) act(a action) {
+func (m *mainWindow) act(a action) { m.actFrom(a, false) }
+
+// actFrom is act. From the tray, a failure opens the window on the Status
+// tab, where the banner explains it.
+func (m *mainWindow) actFrom(a action, fromTray bool) {
 	if a == actNone || m.in.Acting != actNone || m.importing {
 		return
 	}
@@ -500,6 +516,10 @@ func (m *mainWindow) act(a action) {
 				m.in.Action = p
 				m.log.Add(a.String()+" failed", "problem", string(p.ID), "error", errorDetails(err))
 				m.poller.Poke() // the status may have changed too
+				if fromTray {
+					m.tabs.SelectIndex(0)
+					m.showWindow()
+				}
 			} else {
 				m.log.Add(a.String()+" done", "state", string(st.State))
 				switch a {

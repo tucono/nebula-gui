@@ -1,0 +1,9 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+<!-- Tray: connecting or disconnecting. Outlined hosts, dimmed. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <path d="M28.1 20 L15.9 41 M35.9 20 L48.1 41 M20 48 L44 48" fill="none" stroke="#8b929c" stroke-width="4" stroke-linecap="round" stroke-opacity="0.45"/>
+  <circle cx="32" cy="13" r="8" fill="none" stroke="#8b929c" stroke-width="4" stroke-opacity="0.45"/>
+  <circle cx="12" cy="48" r="8" fill="none" stroke="#8b929c" stroke-width="4" stroke-opacity="0.45"/>
+  <circle cx="52" cy="48" r="8" fill="none" stroke="#8b929c" stroke-width="4" stroke-opacity="0.45"/>
+</svg>

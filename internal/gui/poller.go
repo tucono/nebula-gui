@@ -30,6 +30,9 @@ const (
 	// peersSlowInterval is how often peers are read while the Peers tab
 	// isn't showing. While it shows, they're read on every poll.
 	peersSlowInterval = 10 * time.Second
+	// hiddenPollInterval is how often the status is read while the window
+	// is hidden in the tray. Peers aren't read then.
+	hiddenPollInterval = 10 * time.Second
 )
 
 // serviceClient is the part of api.Client the poller uses.
@@ -74,7 +77,8 @@ const (
 //
 // While Nebula runs it also reads the peers: on every poll while peersFast
 // is set (the Peers tab shows), otherwise every peersSlowInterval, and at
-// once after Poke.
+// once after Poke. While the window is hidden it reads only the status,
+// every hiddenPollInterval, for the tray.
 type poller struct {
 	c    serviceClient
 	log  *appLog
@@ -84,6 +88,7 @@ type poller struct {
 
 	peersFast atomic.Bool
 	peersNow  atomic.Bool // Poke asked for fresh peers
+	hidden    atomic.Bool // the window is hidden in the tray
 
 	// Only the polling goroutine touches these.
 	versionOK  bool // the version was checked since the last (re)connect
@@ -109,6 +114,22 @@ func (p *poller) SetPeersFast(on bool) {
 	}
 }
 
+// SetHidden switches to the hidden window's rate. Showing the window polls
+// at once, so it's current.
+func (p *poller) SetHidden(on bool) {
+	if p.hidden.Swap(on) != on && !on {
+		p.Poke()
+	}
+}
+
+// delay is how long to wait after a poll that asked for d.
+func (p *poller) delay(d time.Duration) time.Duration {
+	if p.hidden.Load() {
+		return max(d, hiddenPollInterval)
+	}
+	return d
+}
+
 // Poke makes the poller poll now instead of waiting, and read the peers
 // too.
 func (p *poller) Poke() {
@@ -128,7 +149,7 @@ func (p *poller) run(ctx context.Context, deliver func(pollResult)) {
 			return
 		}
 		deliver(r)
-		t := time.NewTimer(delay)
+		t := time.NewTimer(p.delay(delay))
 		select {
 		case <-ctx.Done():
 			t.Stop()
@@ -190,6 +211,10 @@ func (p *poller) pollPeers(ctx context.Context, st *api.StatusResponse, r *pollR
 		p.peersAt = time.Time{}
 		p.peersNow.Store(false)
 		r.PeersUpdated, r.Peers = true, nil
+		return
+	}
+	if p.hidden.Load() {
+		// Nobody sees them. A Poke while hidden reads them once shown.
 		return
 	}
 	now := p.now()

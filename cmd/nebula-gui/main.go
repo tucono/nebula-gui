@@ -6,6 +6,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 
 	"github.com/tucono/nebula-gui/internal/api"
@@ -20,9 +21,11 @@ var version = "0.0.0-dev"
 const socketEnv = "NEBULA_GUI_SOCKET"
 
 func main() {
+	hidden := flag.Bool("hidden", false, "start in the tray without showing the window (used at sign-in)")
+	flag.Parse()
 	addr := os.Getenv(socketEnv)
 	if addr == "" {
 		addr = ipc.DefaultAddress()
 	}
-	gui.Run(gui.Options{Client: api.NewClient(addr), AppVersion: version})
+	gui.Run(gui.Options{Client: api.NewClient(addr), AppVersion: version, Hidden: *hidden})
 }

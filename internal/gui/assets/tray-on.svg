@@ -1,0 +1,9 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+<!-- Tray: connected. Filled hosts. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <path d="M32 13 L12 48 L52 48 Z" fill="none" stroke="#2ea043" stroke-width="5" stroke-linejoin="round"/>
+  <circle cx="32" cy="13" r="10" fill="#2ea043"/>
+  <circle cx="12" cy="48" r="10" fill="#2ea043"/>
+  <circle cx="52" cy="48" r="10" fill="#2ea043"/>
+</svg>

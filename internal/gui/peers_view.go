@@ -117,6 +117,10 @@ type peersView struct {
 	onMore  func(r peerRow, from fyne.CanvasObject)
 	copied  netip.Addr // the row that says "Copied", if any
 	copySeq int
+	// after runs f after d, off the UI goroutine. Tests replace it: Fyne's
+	// test driver runs fyne.Do in place, so a timer firing during a later
+	// test would race with it.
+	after func(d time.Duration, f func())
 	// pinging are the rows with a ping running.
 	pinging map[netip.Addr]bool
 	// results are the latest ping results, one per peer, newest first.
@@ -139,7 +143,7 @@ type pingLine struct {
 // newPeersView returns the Peers tab. onMore opens a row's ⋯ menu; onAdd
 // opens the Add peer dialog.
 func newPeersView(onMore func(r peerRow, from fyne.CanvasObject), onAdd func()) *peersView {
-	v := &peersView{onMore: onMore, pinging: map[netip.Addr]bool{}}
+	v := &peersView{onMore: onMore, pinging: map[netip.Addr]bool{}, after: afterFunc}
 	v.note = widget.NewLabel(peersNoteStopped)
 	v.note.Wrapping = fyne.TextWrapWord
 	v.note.Importance = widget.LowImportance
@@ -272,7 +276,7 @@ func (v *peersView) showCopied(ip netip.Addr) {
 	v.copySeq++
 	seq := v.copySeq
 	v.list.Refresh()
-	time.AfterFunc(copiedFor, func() {
+	v.after(copiedFor, func() {
 		fyne.Do(func() {
 			if v.copySeq == seq {
 				v.copied = netip.Addr{}
@@ -281,6 +285,8 @@ func (v *peersView) showCopied(ip netip.Addr) {
 		})
 	})
 }
+
+func afterFunc(d time.Duration, f func()) { time.AfterFunc(d, f) }
 
 // peersShowing reports whether the Peers tab is the selected one.
 func (m *mainWindow) peersShowing() bool {

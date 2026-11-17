@@ -42,11 +42,13 @@ type logUpdate struct {
 }
 
 // logPoller reads new lines from GET /v1/logs: every logFastInterval while
-// fast is set, otherwise every logSlowInterval.
+// fast is set, otherwise every logSlowInterval, and not at all while the
+// window is hidden in the tray.
 type logPoller struct {
-	c    logsClient
-	fast atomic.Bool
-	wake chan struct{}
+	c      logsClient
+	fast   atomic.Bool
+	hidden atomic.Bool
+	wake   chan struct{}
 
 	// Only the polling goroutine touches these.
 	since    uint64
@@ -65,6 +67,14 @@ func (p *logPoller) SetFast(on bool) {
 	}
 }
 
+// SetHidden stops reading while the window is hidden. Showing it reads at
+// once.
+func (p *logPoller) SetHidden(on bool) {
+	if p.hidden.Swap(on) != on && !on {
+		p.Poke()
+	}
+}
+
 // Poke makes the poller read now instead of waiting.
 func (p *logPoller) Poke() {
 	select {
@@ -77,14 +87,16 @@ func (p *logPoller) Poke() {
 // goroutine.
 func (p *logPoller) run(ctx context.Context, deliver func(logUpdate)) {
 	for {
-		u := p.fetch(ctx)
-		if ctx.Err() != nil {
-			return
-		}
-		deliver(u)
 		delay := logSlowInterval
-		if p.fast.Load() && u.Err == nil {
-			delay = logFastInterval
+		if !p.hidden.Load() {
+			u := p.fetch(ctx)
+			if ctx.Err() != nil {
+				return
+			}
+			deliver(u)
+			if p.fast.Load() && u.Err == nil {
+				delay = logFastInterval
+			}
 		}
 		t := time.NewTimer(delay)
 		select {

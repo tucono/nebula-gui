@@ -6,7 +6,7 @@ LDFLAGS    := -X main.version=$(VERSION)
 DEV_SOCKET ?= $(XDG_RUNTIME_DIR)/nebula-guid.sock
 DEV_STATE  ?= .dev-state
 
-.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import
+.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons
 
 ## build: build both binaries into bin/
 build:
@@ -41,6 +41,10 @@ lab-down:
 ## lab-import: send the lab's dev config to the dev service
 lab-import:
 	testlab/lab.sh import "$(DEV_SOCKET)"
+
+## icons: render the app icon's SVG to the packages' PNG, ICO and ICNS files in dist/icons
+icons:
+	go run ./packaging/icons -src internal/gui/assets -out dist/icons
 
 lint:
 	golangci-lint run

@@ -23,6 +23,9 @@ const appID = "io.github.tucono.nebulagui"
 type Options struct {
 	Client     *api.Client
 	AppVersion string
+	// Hidden starts the app in the tray without showing the window, for
+	// starting at sign-in. Without a tray the window shows anyway.
+	Hidden bool
 }
 
 // Run opens the main window and blocks until the app quits.
@@ -39,6 +42,7 @@ func Run(opts Options) {
 	log.Add("app started", "version", opts.AppVersion, "os", runtime.GOOS+"/"+runtime.GOARCH)
 
 	a := app.NewWithID(appID)
+	a.SetIcon(appIcon)
 	m := newMainWindow(a, opts.Client, log, opts.AppVersion)
 	if p, err := defaultNameStorePath(); err == nil {
 		m.names = openNameStore(p)
@@ -47,7 +51,18 @@ func Run(opts Options) {
 		m.saved = openPeerStore(p)
 	}
 	m.start()
-	m.w.ShowAndRun()
+	if t := newDesktopTray(a); t != nil {
+		m.attachTray(t)
+	} else {
+		log.Add("no tray: closing the window quits")
+	}
+	if opts.Hidden && m.tray != nil {
+		m.setHidden(true)
+		log.Add("started hidden in the tray")
+		a.Run()
+	} else {
+		m.w.ShowAndRun()
+	}
 	m.close()
 	log.Add("app closed")
 }
