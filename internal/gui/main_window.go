@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/tucono/nebula-gui/internal/api"
+	"github.com/tucono/nebula-gui/internal/autostart"
 )
 
 // actionClient is the part of api.Client the window's buttons use.
@@ -29,13 +30,16 @@ type actionClient interface {
 	ClosePeer(ctx context.Context, vpnIP string) error
 	Ping(ctx context.Context, req api.PingRequest) (*api.PingResponse, error)
 	Diagnostics(ctx context.Context, lines int) (*api.DiagnosticsResponse, error)
+	Settings(ctx context.Context) (*api.Settings, error)
+	PutSettings(ctx context.Context, s api.Settings) (*api.Settings, error)
 	logsClient
 	Addr() string
 }
 
 // mainWindow is the app's window. The Status tab has a problem banner or
 // the status header, then the versions in small print; the Peers tab
-// lists peers; the Logs tab has the service log. Its fields are only touched on the UI
+// lists peers; the Logs tab has the service log; the Settings tab has the
+// service's autoconnect and the user's start at sign-in. Its fields are only touched on the UI
 // goroutine; the poller and the actions hand results over with fyne.Do.
 type mainWindow struct {
 	a         fyne.App
@@ -79,6 +83,12 @@ type mainWindow struct {
 	tabs     *container.AppTabs
 	logs     *logView
 	peers    *peersView
+	settings *settingsView
+	// sets is what the Settings tab shows.
+	sets settingsInput
+	// autostart is this user's start-at-sign-in entry, or nil where there
+	// isn't one.
+	autostart autostart.Entry
 	// help is the open Get help dialog, or nil.
 	help *helpDialog
 	// addPeerD is the open Add peer dialog, or nil.
@@ -131,6 +141,7 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 	m.logPoller = newLogPoller(c)
 	m.logs = newLogView(newLogModel(), func() { m.openHelp(m.bannerProblem()) })
 	m.peers = newPeersView(m.showPeerMenu, m.showAddPeer)
+	m.settings = newSettingsView(m.setAutoconnect, m.setAutostart)
 
 	m.banner = newProblemView(problemHandlers{
 		OnFix:     m.fix,
@@ -187,10 +198,14 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 		container.NewTabItem("Status", scroll),
 		container.NewTabItem("Peers", m.peers.root),
 		container.NewTabItem("Logs", m.logs.root),
+		container.NewTabItem("Settings", m.settings.root),
 	)
 	m.tabs.OnSelected = func(*container.TabItem) {
 		m.logPoller.SetFast(m.logsShowing())
 		m.poller.SetPeersFast(m.peersShowing())
+		if m.settingsShowing() {
+			m.openSettings()
+		}
 	}
 	m.w.SetMainMenu(m.mainMenu())
 	m.w.SetContent(container.New(&resizeWatcher{onResize: func(fyne.Size) {
@@ -284,6 +299,7 @@ func (m *mainWindow) applyPoll(r pollResult) {
 		}
 	}
 	m.render()
+	m.maybeReadSettings()
 }
 
 func (m *mainWindow) applyStatus(st *api.StatusResponse) {
@@ -349,6 +365,7 @@ func (m *mainWindow) render() {
 
 	m.renderPeers()
 	m.renderTray()
+	m.renderSettings()
 }
 
 func (m *mainWindow) footerText() string {

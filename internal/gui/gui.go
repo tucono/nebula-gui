@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/app"
 
 	"github.com/tucono/nebula-gui/internal/api"
+	"github.com/tucono/nebula-gui/internal/autostart"
 )
 
 const appID = "io.github.tucono.nebulagui"
@@ -74,6 +75,7 @@ func Run(opts Options) {
 	} else {
 		log.Add("no tray: closing the window quits")
 	}
+	setUpAutostart(m)
 	if opts.Hidden && m.tray != nil {
 		m.setHidden(true)
 		log.Add("started hidden in the tray")
@@ -95,6 +97,23 @@ func claimDefaultInstance(show bool) (*instance, error) {
 		return nil, err
 	}
 	return claimInstance(addr, show)
+}
+
+// setUpAutostart gives the window this user's start-at-sign-in entry, and
+// on the first run with a tray turns it on.
+func setUpAutostart(m *mainWindow) {
+	exe, err := os.Executable()
+	if err != nil {
+		m.log.Add("start at sign-in unavailable", "error", err.Error())
+		return
+	}
+	e, err := autostart.New(exe)
+	if err != nil {
+		m.log.Add("start at sign-in unavailable", "error", err.Error())
+		return
+	}
+	m.setAutostartEntry(e, autostart.IsTempBuild(exe))
+	m.applyAutostartDefault()
 }
 
 // openDownloads opens the public releases page in the browser.

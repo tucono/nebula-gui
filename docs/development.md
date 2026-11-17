@@ -44,6 +44,7 @@ internal/
   nebulactl/         # thin wrapper over nebula.Main / *nebula.Control (only package importing nebula)
   updater/           # manifest fetch + minisign verify, download, per-OS installer launch
   gui/               # Fyne windows, widgets, tray, poller
+  autostart/         # start at sign-in: XDG autostart file, LaunchAgent, Run registry value
   pki/               # inline-PEM helpers, cert parsing for display
 packaging/
   linux/             # systemd unit, polkit/udev bits, .desktop file, nfpm config

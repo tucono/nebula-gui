@@ -235,10 +235,10 @@ Release URLs must work without signing in, which GitHub release assets on a publ
 
 ### 5. GUI: Settings tab and start at sign-in
 
-**Files:** `internal/gui/settings_view.go`, `autostart_linux.go`, `autostart_darwin.go`, `autostart_windows.go` and tests.
+**Files:** `internal/gui/settings_view.go`; `internal/autostart/` (`autostart_linux.go`, `autostart_darwin.go`, `autostart_windows.go`) and tests. The entries are a package of their own, without Fyne, so they build and vet for every OS from one machine.
 
 - The two settings, with the service one disabled and explained when the service can't be reached.
-- Autostart files written to a temp home in tests.
+- Autostart files written to a temp home in tests; on Windows, the Run value under a test key in HKCU. A Run value turned off in Task Manager's Startup apps counts as off.
 
 ### 6. GUI: problems that know about the installer
 

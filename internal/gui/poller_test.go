@@ -30,6 +30,11 @@ type fakeService struct {
 	peers     []api.Peer
 	peersErr  error
 	closeErr  error
+	// autoconnect is the service's setting; settingsErr fails reading it
+	// and putSettingsErr changing it.
+	autoconnect    bool
+	settingsErr    error
+	putSettingsErr error
 	// ping answers Ping under the lock; nil uses fakePing.
 	ping func(f *fakeService, vpnIP string) (*api.PingResponse, error)
 }
