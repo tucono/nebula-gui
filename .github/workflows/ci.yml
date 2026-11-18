@@ -130,27 +130,29 @@ jobs:
         shell: pwsh
         run: |
           $setup = (Get-Item dist\nebula-gui-*-windows-amd64-setup.exe).FullName
-          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=dist\install.log'
+          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\install.log"
           packaging\windows\check-install.ps1 -State Installed
 
       - name: Uninstall, keeping the settings, and check
         shell: pwsh
         run: |
           $unins = Join-Path $env:ProgramFiles 'nebula-gui\unins000.exe'
-          Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=dist\uninstall.log'
+          Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\uninstall.log"
           # The uninstaller hands over to a copy of itself and returns early.
           for ($i = 0; $i -lt 120 -and (Test-Path $unins); $i++) { Start-Sleep 1 }
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(_iu|unins|nebula|net|sc|taskkill|netsh)' } | Format-Table ProcessId, ParentProcessId, Name, CommandLine -AutoSize -Wrap
           packaging\windows\check-install.ps1 -State Removed
 
       - name: Reinstall, uninstall with /REMOVESETTINGS, and check
         shell: pwsh
         run: |
           $setup = (Get-Item dist\nebula-gui-*-windows-amd64-setup.exe).FullName
-          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=dist\reinstall.log'
+          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\reinstall.log"
           packaging\windows\check-install.ps1 -State Installed
           $unins = Join-Path $env:ProgramFiles 'nebula-gui\unins000.exe'
-          Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/REMOVESETTINGS', '/LOG=dist\purge.log'
+          Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/REMOVESETTINGS', "/LOG=$PWD\dist\purge.log"
           for ($i = 0; $i -lt 120 -and (Test-Path $unins); $i++) { Start-Sleep 1 }
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(_iu|unins|nebula|net|sc|taskkill|netsh)' } | Format-Table ProcessId, ParentProcessId, Name, CommandLine -AutoSize -Wrap
           packaging\windows\check-install.ps1 -State Purged
 
       - name: Show the setup logs
