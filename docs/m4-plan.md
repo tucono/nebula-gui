@@ -144,7 +144,7 @@ WantedBy=multi-user.target
 ### Windows (Service Control Manager)
 
 - `nebula-guid.exe` gains subcommands, through `golang.org/x/sys/windows/svc` and `svc/mgr`:
-  - `install --allow-user <name>`: registers the `nebula-guid` service (automatic start, LocalSystem, restart on failure), with its command line `run --socket-group nebula-gui --socket-owner <name>`.
+  - `install --allow-user <name>`: creates the `nebula-gui` group if it's missing, adds `<name>` to it, and registers the `nebula-guid` service (automatic start, LocalSystem, restart on failure), with its command line `run --socket-group nebula-gui --socket-owner <name>`. The installer uses `--allow-session-user` instead, which picks the person signed in to the session the installer runs in (WTS): when someone else types an administrator's password into the elevation prompt, the elevated installer runs as the administrator but in the session of the person at the screen, who's the one who'll use the app. With no one signed in (session 0, as for a process a service starts), it grants no one and says to add people to the group.
   - `uninstall`: stops it and removes it.
   - `run`: what the SCM starts. Inside the SCM it runs the `svc.Handler`; a Stop or Shutdown request cancels the context `Serve` already uses, so Nebula stops cleanly.
   - With no subcommand it runs in the foreground, as today.
@@ -163,14 +163,14 @@ WantedBy=multi-user.target
 |---|---|---|---|
 | Linux | `nebula-gui` (sysusers) | on a fresh install, `postinst` adds `$SUDO_USER` or the user behind `$PKEXEC_UID`; failing both (a software centre installs through PackageKit, which doesn't say who asked), the user of the active session on `seat0` | after a restart |
 | macOS | `nebula-gui` (`dseditgroup`) | `postinstall` adds the console user (`stat -f%Su /dev/console`) | at the next app start |
-| Windows | `nebula-gui` (installer) | installing user granted directly, and added to the group | at once |
+| Windows | `nebula-gui` (`nebula-guid install`, run by the installer) | on a fresh install, the person signed in to the installer's session is granted directly, and added to the group | at once |
 
 On Linux, the GUI's **no permission** problem already gives the command. It gains a check: if the user is in `nebula-gui` according to `/etc/group` but not in this session (`os.Getgroups`), it says "Restart your computer to finish" instead. Signing out isn't enough on every desktop: on COSMIC the systemd user manager, which starts the apps, outlived the sign-out and kept the old groups in the M4 smoke test, and only a restart applied the new one.
 
 ### Uninstalling
 
 - Stops the service first, which stops Nebula and removes the tun device.
-- Keeps the state directory (the imported config, settings and logs) by default, so a reinstall picks up where it left off. On Linux even a purge keeps it, as do the `nebula-guid` user and `nebula-gui` group. `apt purge` / `dnf remove` followed by deleting the directory, a checkbox on Windows ("Also remove my Nebula settings"), and a flag to the macOS uninstall script remove it.
+- Keeps the state directory (the imported config, settings and logs) by default, so a reinstall picks up where it left off. On Linux even a purge keeps it, as do the `nebula-guid` user and `nebula-gui` group. `apt purge` / `dnf remove` followed by deleting the directory, a question in the Windows uninstaller ("Also remove your Nebula settings?", default No; `/REMOVESETTINGS` for a silent uninstall), which also removes the `nebula-gui` group,, and a flag to the macOS uninstall script remove it.
 - Doesn't touch users' own settings (`peers.json`, `mask-names.json`, the GUI log, sign-in entries) beyond what the OS uninstaller conventionally removes. The docs list where they are.
 
 ## Packages
@@ -257,7 +257,13 @@ Release URLs must work without signing in, which GitHub release assets on a publ
 
 ### 8. Windows installer
 
-**Files:** `packaging/windows/` (`nebula-gui.iss`, `wintun.sha256`, fetch script), `Makefile` (`package-windows`).
+**Files:** `packaging/windows/` (`nebula-gui.iss`, `wintun.sha256`, `fetch-wintun.ps1`, `check-install.ps1`), `cmd/nebula-guid/access_windows.go`, `service_windows.go`, `Makefile` (`package-windows`), `.github/workflows/ci.yml`.
+
+- `make package-windows` (from bash on Windows) fetches and checks Wintun, builds both binaries (the GUI with `-H=windowsgui`), and runs ISCC. The setup is `dist/nebula-gui-<version>-windows-amd64-setup.exe`.
+- Fresh install: files, Start Menu shortcut, firewall rule, then `nebula-guid install --allow-session-user` and `net start`. Upgrade: `net stop` before the files are replaced; the service's registration is kept, so an upgrade never grants access, and it's started again only if it was running. The app is closed through Restart Manager (`CloseApplications=force`).
+- Uninstall: asks about the settings first, then `nebula-guid uninstall` (stops Nebula, removes the service), removes the firewall rule and ends the app in every session.
+- CI (`package-windows` job): builds the setup on `windows-latest`, installs it silently and checks the service, group, firewall rule and the API over the pipe (`check-install.ps1`), then uninstalls twice: keeping the settings, then with `/REMOVESETTINGS`.
+- A service registered by hand from another directory (`docs/development.md`) is stopped and deleted, and the install carries on as a fresh one.
 
 ### 9. macOS package
 

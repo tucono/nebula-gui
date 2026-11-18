@@ -98,3 +98,67 @@ jobs:
             dist/*.deb
             dist/*.rpm
           retention-days: 7
+
+  # The Windows installer, installed silently on the runner (an
+  # administrator, and a machine where services run), then uninstalled
+  # twice: keeping the settings, then removing them.
+  package-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # packaging/version.sh counts commits and reads tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install Inno Setup
+        run: |
+          if [ ! -f "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then
+            choco install innosetup --no-progress -y
+          fi
+
+      - name: Build the installer
+        run: make package-windows
+
+      - name: Install and check
+        shell: pwsh
+        run: |
+          $setup = (Get-Item dist\nebula-gui-*-windows-amd64-setup.exe).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=dist\install.log'
+          packaging\windows\check-install.ps1 -State Installed
+
+      - name: Uninstall, keeping the settings, and check
+        shell: pwsh
+        run: |
+          $unins = Join-Path $env:ProgramFiles 'nebula-gui\unins000.exe'
+          Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=dist\uninstall.log'
+          # The uninstaller hands over to a copy of itself and returns early.
+          for ($i = 0; $i -lt 120 -and (Test-Path $unins); $i++) { Start-Sleep 1 }
+          packaging\windows\check-install.ps1 -State Removed
+
+      - name: Reinstall, uninstall with /REMOVESETTINGS, and check
+        shell: pwsh
+        run: |
+          $setup = (Get-Item dist\nebula-gui-*-windows-amd64-setup.exe).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=dist\reinstall.log'
+          packaging\windows\check-install.ps1 -State Installed
+          $unins = Join-Path $env:ProgramFiles 'nebula-gui\unins000.exe'
+          Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/REMOVESETTINGS', '/LOG=dist\purge.log'
+          for ($i = 0; $i -lt 120 -and (Test-Path $unins); $i++) { Start-Sleep 1 }
+          packaging\windows\check-install.ps1 -State Purged
+
+      - name: Show the setup logs
+        if: always()
+        run: for f in dist/*.log; do [ -f "$f" ] && { echo "=== $f"; cat "$f"; }; done; true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: dist/*-setup.exe
+          retention-days: 7

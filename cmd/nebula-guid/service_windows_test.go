@@ -34,17 +34,39 @@ func TestServiceArgs(t *testing.T) {
 }
 
 func TestParseInstall(t *testing.T) {
-	if u, err := parseInstall(nil); err != nil || u != "" {
-		t.Errorf("no flags: %q, %v", u, err)
+	if f, err := parseInstall(nil); err != nil || f != (installFlags{}) {
+		t.Errorf("no flags: %+v, %v", f, err)
 	}
-	if u, err := parseInstall([]string{"--allow-user", "alice"}); err != nil || u != "alice" {
-		t.Errorf("--allow-user alice: %q, %v", u, err)
+	if f, err := parseInstall([]string{"--allow-user", "alice"}); err != nil || f.allowUser != "alice" || f.sessionUser {
+		t.Errorf("--allow-user alice: %+v, %v", f, err)
+	}
+	if f, err := parseInstall([]string{"--allow-session-user"}); err != nil || !f.sessionUser || f.allowUser != "" {
+		t.Errorf("--allow-session-user: %+v, %v", f, err)
+	}
+	if _, err := parseInstall([]string{"--allow-user", "alice", "--allow-session-user"}); err == nil {
+		t.Error("both flags were accepted")
 	}
 	if _, err := parseInstall([]string{"alice"}); err == nil {
 		t.Error("a bare user name was accepted")
 	}
 	if _, err := parseInstall([]string{"--socket-group", "x"}); err == nil {
 		t.Error("an unknown flag was accepted")
+	}
+}
+
+// TestSessionUser runs the session query for real. A CI runner may run
+// in a session no one is signed in to, which is the other valid answer.
+func TestSessionUser(t *testing.T) {
+	u, err := sessionUser()
+	switch {
+	case errors.Is(err, errNoSessionUser):
+		t.Log("no one signed in to this session")
+	case err != nil:
+		t.Fatal(err)
+	case u == "" || strings.HasSuffix(u, `\`):
+		t.Errorf("sessionUser() = %q", u)
+	default:
+		t.Logf("session user %q", u)
 	}
 }
 

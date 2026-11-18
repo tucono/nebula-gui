@@ -102,10 +102,9 @@ $env:NEBULA_GUI_SOCKET="\\.\pipe\nebula-guid-dev"; go run .\cmd\nebula-gui
 ```
 
 ### Windows, as a service
-The release build registers itself with the Service Control Manager; the installer (M4) will run these commands. From an Administrator PowerShell, with Wintun extracted as above:
+The release build registers itself with the Service Control Manager; the installer (M4) runs the same commands, with `--allow-session-user` (the person signed in at the screen). From an Administrator PowerShell, with Wintun extracted as above:
 ```powershell
 go build -o bin\nebula-guid.exe .\cmd\nebula-guid
-net localgroup nebula-gui /add       # the installer creates this group
 .\bin\nebula-guid.exe install --allow-user $env:USERNAME
 sc.exe start nebula-guid
 # normal PowerShell: the GUI uses the installed pipe by default
@@ -113,7 +112,7 @@ go run .\cmd\nebula-gui
 # remove it again (the state directory stays)
 .\bin\nebula-guid.exe uninstall
 ```
-`install` points the service at the binary where it is, so don't move or rebuild it while installed: stop the service first. Start, stop and fatal errors go to the Application event log under the source `nebula-guid`; everything else goes to the service's log file.
+`install` creates the `nebula-gui` group if it doesn't exist, and adds the `--allow-user` user to it as well as giving them access at once. It points the service at the binary where it is, so don't move or rebuild it while installed: stop the service first. Start, stop and fatal errors go to the Application event log under the source `nebula-guid`; everything else goes to the service's log file.
 
 `--state-dir` is where the service keeps the imported config. It defaults to the installed location (see [architecture.md](architecture.md#service-cmdnebula-guid-internalservice)), so in development point it at the gitignored `.dev-state/`.
 

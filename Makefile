@@ -12,8 +12,9 @@ RELEASE_VERSION ?= $(shell packaging/version.sh)
 PKG_VERSION     ?= $(shell packaging/version.sh --package)
 RELEASE_LDFLAGS := -s -w -X main.version=$(RELEASE_VERSION)
 NFPM            ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.49.0
+ISCC            ?= C:/Program Files (x86)/Inno Setup 6/ISCC.exe
 
-.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons package-linux
+.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons package-linux package-windows
 
 ## build: build both binaries into bin/
 build:
@@ -59,6 +60,13 @@ package-linux: icons
 	go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/linux/nebula-gui ./cmd/nebula-gui
 	PKG_VERSION="$(PKG_VERSION)" $(NFPM) package --config packaging/linux/nfpm.yaml --packager deb --target dist/
 	PKG_VERSION="$(PKG_VERSION)" $(NFPM) package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
+
+## package-windows: build the setup .exe into dist/ (amd64; run on Windows with Inno Setup 6, from bash)
+package-windows: icons
+	powershell -NoProfile -ExecutionPolicy Bypass -File packaging/windows/fetch-wintun.ps1 -OutDir dist/windows
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/windows/nebula-guid.exe ./cmd/nebula-guid
+	go build -trimpath -ldflags "$(RELEASE_LDFLAGS) -H=windowsgui" -o dist/windows/nebula-gui.exe ./cmd/nebula-gui
+	MSYS2_ARG_CONV_EXCL="*" "$(ISCC)" /Q /DAppVersion=$(RELEASE_VERSION) /DNumVersion=$(firstword $(subst -, ,$(RELEASE_VERSION))) packaging/windows/nebula-gui.iss
 
 lint:
 	golangci-lint run

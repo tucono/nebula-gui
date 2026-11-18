@@ -42,36 +42,64 @@ func serviceArgs(allowUser string) []string {
 	return args
 }
 
-// parseInstall parses the flags of the install command.
-func parseInstall(args []string) (allowUser string, err error) {
-	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	fs.StringVar(&allowUser, "allow-user", "",
-		"user given access to the service at once, besides members of the "+socketGroup+" group")
-	if err := fs.Parse(args); err != nil {
-		return "", err
-	}
-	if fs.NArg() > 0 {
-		return "", fmt.Errorf("unexpected argument %q", fs.Arg(0))
-	}
-	return allowUser, nil
+// installFlags are the install command's flags.
+type installFlags struct {
+	allowUser   string
+	sessionUser bool
 }
 
-// installService registers the service: automatic start, LocalSystem,
-// restarted on failure. It doesn't start it.
+// parseInstall parses the flags of the install command.
+func parseInstall(args []string) (installFlags, error) {
+	var f installFlags
+	fs := flag.NewFlagSet("install", flag.ContinueOnError)
+	fs.StringVar(&f.allowUser, "allow-user", "",
+		"user given access to the service at once, and added to the "+socketGroup+" group")
+	fs.BoolVar(&f.sessionUser, "allow-session-user", false,
+		"like --allow-user, for the person signed in to this session (what the installer uses)")
+	if err := fs.Parse(args); err != nil {
+		return installFlags{}, err
+	}
+	if fs.NArg() > 0 {
+		return installFlags{}, fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	if f.allowUser != "" && f.sessionUser {
+		return installFlags{}, errors.New("use --allow-user or --allow-session-user, not both")
+	}
+	return f, nil
+}
+
+// installService creates the group, gives the allowed user access, and
+// registers the service: automatic start, LocalSystem, restarted on
+// failure. It doesn't start it.
 func installService(args []string) error {
-	allowUser, err := parseInstall(args)
+	f, err := parseInstall(args)
 	if err != nil {
 		return err
 	}
-	// The service looks both up every time it starts; catch a typo or a
-	// missing group now rather than as a service that won't start.
-	if _, err := winio.LookupSidByName(socketGroup); err != nil {
-		return fmt.Errorf("the %s group doesn't exist; the installer creates it: %w", socketGroup, err)
+	if err := ensureGroup(socketGroup, "People who may use the nebula-gui app"); err != nil {
+		return err
+	}
+	allowUser := f.allowUser
+	if f.sessionUser {
+		allowUser, err = sessionUser()
+		if errors.Is(err, errNoSessionUser) {
+			fmt.Printf("%v; add each person who'll use the app to the %s group.\n", err, socketGroup)
+		} else if err != nil {
+			return err
+		}
 	}
 	if allowUser != "" {
+		// The service looks it up every time it starts; catch a typo now
+		// rather than as a service that won't start.
 		if _, err := winio.LookupSidByName(allowUser); err != nil {
 			return fmt.Errorf("no user %q: %w", allowUser, err)
 		}
+		// Direct access works at once; the group, after the next sign-in,
+		// and it outlasts a reinstall.
+		if err := addGroupMember(socketGroup, allowUser); err != nil {
+			return err
+		}
+		fmt.Printf("Gave %s access, and added them to the %s group.\n", allowUser, socketGroup)
 	}
 	exe, err := os.Executable()
 	if err != nil {
