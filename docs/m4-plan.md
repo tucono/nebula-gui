@@ -161,7 +161,7 @@ WantedBy=multi-user.target
 
 | | Group created | Installing user added | Takes effect |
 |---|---|---|---|
-| Linux | `nebula-gui` (sysusers) | `postinst` adds `$SUDO_USER` or the user behind `$PKEXEC_UID`, when there is one | after signing out and in |
+| Linux | `nebula-gui` (sysusers) | on a fresh install, `postinst` adds `$SUDO_USER` or the user behind `$PKEXEC_UID`; failing both (a software centre installs through PackageKit, which doesn't say who asked), the user of the active session on `seat0` | after signing out and in |
 | macOS | `nebula-gui` (`dseditgroup`) | `postinstall` adds the console user (`stat -f%Su /dev/console`) | at the next app start |
 | Windows | `nebula-gui` (installer) | installing user granted directly, and added to the group | at once |
 
@@ -170,7 +170,7 @@ On Linux, the GUI's **no permission** problem already gives the command. It gain
 ### Uninstalling
 
 - Stops the service first, which stops Nebula and removes the tun device.
-- Keeps the state directory (the imported config, settings and logs) by default, so a reinstall picks up where it left off. `apt purge` / `dnf remove` followed by deleting the directory, a checkbox on Windows ("Also remove my Nebula settings"), and a flag to the macOS uninstall script remove it.
+- Keeps the state directory (the imported config, settings and logs) by default, so a reinstall picks up where it left off. On Linux even a purge keeps it, as do the `nebula-guid` user and `nebula-gui` group. `apt purge` / `dnf remove` followed by deleting the directory, a checkbox on Windows ("Also remove my Nebula settings"), and a flag to the macOS uninstall script remove it.
 - Doesn't touch users' own settings (`peers.json`, `mask-names.json`, the GUI log, sign-in entries) beyond what the OS uninstaller conventionally removes. The docs list where they are.
 
 ## Packages

@@ -6,7 +6,14 @@ LDFLAGS    := -X main.version=$(VERSION)
 DEV_SOCKET ?= $(XDG_RUNTIME_DIR)/nebula-guid.sock
 DEV_STATE  ?= .dev-state
 
-.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons
+# Release builds (packages) take their version from the tag; see
+# packaging/version.sh.
+RELEASE_VERSION ?= $(shell packaging/version.sh)
+PKG_VERSION     ?= $(shell packaging/version.sh --package)
+RELEASE_LDFLAGS := -s -w -X main.version=$(RELEASE_VERSION)
+NFPM            ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.49.0
+
+.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons package-linux
 
 ## build: build both binaries into bin/
 build:
@@ -45,6 +52,13 @@ lab-import:
 ## icons: render the app icon's SVG to the packages' PNG, ICO and ICNS files in dist/icons
 icons:
 	go run ./packaging/icons -src internal/gui/assets -out dist/icons
+
+## package-linux: build the .deb and .rpm into dist/ (amd64; run on Linux)
+package-linux: icons
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/linux/nebula-guid ./cmd/nebula-guid
+	go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/linux/nebula-gui ./cmd/nebula-gui
+	PKG_VERSION="$(PKG_VERSION)" $(NFPM) package --config packaging/linux/nfpm.yaml --packager deb --target dist/
+	PKG_VERSION="$(PKG_VERSION)" $(NFPM) package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
 
 lint:
 	golangci-lint run

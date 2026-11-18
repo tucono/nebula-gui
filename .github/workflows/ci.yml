@@ -41,3 +41,60 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
+
+  # The Linux packages, built on the oldest Ubuntu LTS runner so the GUI's
+  # glibc floor stays low. The .deb is installed on the runner itself, which
+  # runs systemd, so the service really starts; the .rpm is installed in a
+  # Fedora container, which checks files, user and group only.
+  package-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # packaging/version.sh counts commits and reads tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install Fyne build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
+
+      - name: Check the package scripts
+        run: shellcheck packaging/version.sh packaging/linux/*.sh
+
+      - name: Build the packages
+        run: make package-linux
+
+      - name: Install the .deb and check it
+        run: |
+          sudo apt-get install -y ./dist/*.deb
+          sudo packaging/linux/check-install.sh --running "$USER"
+
+      - name: Remove the .deb and check what's left
+        run: |
+          sudo apt-get remove -y nebula-gui
+          if systemctl list-unit-files nebula-guid.service | grep -q nebula-guid; then
+            echo "FAIL: the unit is still installed"; exit 1
+          fi
+          if pgrep -x nebula-guid; then
+            echo "FAIL: the service is still running"; exit 1
+          fi
+          sudo test -d /var/lib/nebula-gui || { echo "FAIL: the state directory was removed"; exit 1; }
+          echo "remove check passed"
+
+      - name: Install the .rpm in Fedora and check it
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -w /src fedora:latest sh -c \
+            'dnf install -y dist/*.rpm && packaging/linux/check-install.sh'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+          retention-days: 7
