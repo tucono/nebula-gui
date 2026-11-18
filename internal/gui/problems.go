@@ -47,7 +47,7 @@ const (
 	probServiceNotInstalled  problemID = "service_not_installed"
 	probStartFailed          problemID = "start_failed"
 	probNoPermission         problemID = "no_permission"
-	probSignOutNeeded        problemID = "sign_out_needed"
+	probRestartNeeded        problemID = "restart_needed"
 	probServiceNotResponding problemID = "service_not_responding"
 	probServiceTooOld        problemID = "service_too_old"
 	probAppTooOld            problemID = "app_too_old"
@@ -178,19 +178,17 @@ func startFailed(goos, details string) *problem {
 	return p
 }
 
-// signOutNeeded replaces noPermission when the user has been added to the
-// nebula-gui group since signing in: the group only applies to programs
-// started after the next sign-in.
-func signOutNeeded() *problem {
+// restartNeeded replaces noPermission when the user has been added to the
+// nebula-gui group since signing in. Signing out isn't always enough: on
+// COSMIC, apps are started by the systemd user manager, which can outlive
+// the sign-out and keep the old groups, so the advice is to restart.
+func restartNeeded() *problem {
 	return &problem{
-		ID:      probSignOutNeeded,
+		ID:      probRestartNeeded,
 		Info:    true,
-		Title:   "Sign out and back in to finish",
-		Explain: "Your account has been given access to Nebula on this computer. It takes effect the next time you sign in.",
-		Steps: []string{
-			"Save your work, then sign out and back in.",
-			"If this still shows afterwards, restart your computer.",
-		},
+		Title:   "Restart your computer to finish",
+		Explain: "Your account has been given access to Nebula on this computer. It takes effect after a restart.",
+		Steps:   []string{"Save your work, then restart your computer."},
 	}
 }
 
@@ -207,13 +205,17 @@ func noPermission(goos string) *problem {
 		p.Steps = []string{"Reinstall the app and choose your user account during setup."}
 	default:
 		p.Explain = "Your user account needs to be added to the nebula-gui group before it can control the Nebula connection."
-		p.Steps = []string{
-			"Ask whoever manages this computer to add you, or run the command below.",
-			"Log out and back in.",
-		}
 		if goos == "darwin" {
+			p.Steps = []string{
+				"Ask whoever manages this computer to add you, or run the command below.",
+				"Log out and back in.",
+			}
 			p.Command = `sudo dseditgroup -o edit -a "$USER" -t user nebula-gui`
 		} else {
+			p.Steps = []string{
+				"Ask whoever manages this computer to add you, or run the command below.",
+				"Restart your computer.",
+			}
 			p.Command = `sudo usermod -aG nebula-gui "$USER"`
 		}
 	}

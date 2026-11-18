@@ -69,7 +69,7 @@ func TestProblemForSetup(t *testing.T) {
 		{"refused, not installed", refused, serviceSetup{Known: true}, probServiceNotInstalled},
 		{"refused, installed", refused, serviceSetup{Known: true, Installed: true}, probServiceNotRunning},
 		{"denied", denied, serviceSetup{Known: true, Installed: true}, probNoPermission},
-		{"denied, group pending", denied, serviceSetup{Known: true, Installed: true, GroupPending: true}, probSignOutNeeded},
+		{"denied, group pending", denied, serviceSetup{Known: true, Installed: true, GroupPending: true}, probRestartNeeded},
 		// A pending group explains being refused, not a stopped service.
 		{"refused, group pending", refused, serviceSetup{Known: true, Installed: true, GroupPending: true}, probServiceNotRunning},
 		{"timeout", timeoutErr{}, serviceSetup{Known: true}, probServiceNotResponding},

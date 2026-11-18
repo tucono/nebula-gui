@@ -161,11 +161,11 @@ WantedBy=multi-user.target
 
 | | Group created | Installing user added | Takes effect |
 |---|---|---|---|
-| Linux | `nebula-gui` (sysusers) | on a fresh install, `postinst` adds `$SUDO_USER` or the user behind `$PKEXEC_UID`; failing both (a software centre installs through PackageKit, which doesn't say who asked), the user of the active session on `seat0` | after signing out and in |
+| Linux | `nebula-gui` (sysusers) | on a fresh install, `postinst` adds `$SUDO_USER` or the user behind `$PKEXEC_UID`; failing both (a software centre installs through PackageKit, which doesn't say who asked), the user of the active session on `seat0` | after a restart |
 | macOS | `nebula-gui` (`dseditgroup`) | `postinstall` adds the console user (`stat -f%Su /dev/console`) | at the next app start |
 | Windows | `nebula-gui` (installer) | installing user granted directly, and added to the group | at once |
 
-On Linux, the GUI's **no permission** problem already gives the command. It gains a check: if the user is in `nebula-gui` according to `/etc/group` but not in this session (`os.Getgroups`), it says "You've been given access. Sign out and back in to use it." instead.
+On Linux, the GUI's **no permission** problem already gives the command. It gains a check: if the user is in `nebula-gui` according to `/etc/group` but not in this session (`os.Getgroups`), it says "Restart your computer to finish" instead. Signing out isn't enough on every desktop: on COSMIC the systemd user manager, which starts the apps, outlived the sign-out and kept the old groups in the M4 smoke test, and only a restart applied the new one.
 
 ### Uninstalling
 
@@ -287,7 +287,7 @@ Each GUI commit gets its operator check as usual. The installers are tested on t
 
 **Linux** (the `.deb` on the developer's COSMIC desktop; stop `make dev-service` first, since both use Nebula's port and tun name. The `.rpm` is checked only by CI's install test):
 
-1. Install the `.deb` (or `.rpm`) by double-clicking it. `systemctl status nebula-guid` is active, running as `nebula-guid`. Sign out and in; the app opens without a permission problem.
+1. Install the `.deb` (or `.rpm`) by double-clicking it. `systemctl status nebula-guid` is active, running as `nebula-guid`. Before restarting, the app shows **Restart your computer to finish**. Restart; the app opens without a permission problem.
 2. Import a config made with `testlab/` (lab running on the host; the VM reaches it over the bridge), connect. The tray shows Connected.
 3. Close the window: the app stays in the tray. Click the app's icon in the launcher: the same window comes back, and `pgrep -c nebula-gui` is 1.
 4. Reboot with the config imported and the settings untouched: not connected, and Connect automatically is unticked. Then turn it on, reboot, don't sign in for a minute, then sign in: already connected, and the service log shows "connecting automatically" before the sign-in. Repeat with the lighthouse given by a DNS name.
@@ -307,7 +307,7 @@ The open choices are decided; the remaining items are risks to watch. The servic
 - **Windows installer (step 8). Decided:** Inno Setup. It's preinstalled on GitHub's Windows runners, scripting groups, firewall rules and services is short, it supports silent installs (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and Restart Manager, and the setup `.exe` can be Authenticode-signed in M5. Rejected: an MSI built with WiX, which [updates.md](updates.md#install-mechanics-per-platform) assumes today and which suits centrally managed machines, which this network doesn't have. updates.md changes to match (step 11).
 - **Test machines.** A Windows VM and a Mac are available, so every platform's smoke test runs by hand. Linux is tested on COSMIC only: GNOME, KDE and Fedora stay untested, and the `.rpm` gets CI's install check but no desktop test.
 - **Icons. Decided:** placeholders made with the code in step 3: an original, simple app icon and three tray states (on, off, attention), not based on Nebula's or anyone else's logo. They can ship in releases until real ones replace them; replacing them means swapping the SVG sources and running the render script.
-- **Group sign-out on Linux.** Adding the user to `nebula-gui` only takes effect after signing out, which is the most likely point for someone to get stuck after installing. Granting the installing user directly (a POSIX ACL on the socket, set by the service from a list in its settings) would avoid it. Not planned for M4; revisit if it trips people up.
+- **Group restart on Linux.** Adding the user to `nebula-gui` only takes effect after a restart (signing out isn't reliably enough, see [Giving the user access](#giving-the-user-access)), which is the most likely point for someone to get stuck after installing. Granting the installing user directly (a POSIX ACL on the socket, set by the service from a list in its settings) would avoid it. Not planned for M4; revisit if it trips people up.
 - **Tray support varies on Linux.** GNOME needs an extension, and trays differ in how they show menus and tooltips. GNOME isn't tested; the no-tray fallback (checked on COSMIC with the applet removed) should keep the app usable there, and the status line in the menu covers trays without tooltips.
 - **Fyne's tray on COSMIC/Wayland.** Not tested yet on the developer's desktop. Step 3's operator check covers it; the layout quirk in [the M3 risks](m3-plan.md#risks-and-decisions) doesn't apply to the tray, but applies to the new Settings tab.
 - **Unsigned installers until M5.** SmartScreen and Gatekeeper warn, and the README has to walk people past that. `SHA256SUMS` lets the careful ones check, and the person who runs the network can tell everyone the expected hash.

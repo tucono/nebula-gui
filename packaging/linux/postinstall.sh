@@ -65,7 +65,7 @@ if [ -n "$fresh" ]; then
 	name=$(installing_user)
 	if [ -n "$name" ] && getent passwd "$name" >/dev/null; then
 		if usermod --append --groups "$group" "$name"; then
-			echo "nebula-gui: added $name to the $group group. Sign out and back in to use the app."
+			echo "nebula-gui: added $name to the $group group. Restart the computer to use the app."
 		else
 			echo "nebula-gui: couldn't add $name to the $group group" >&2
 		fi

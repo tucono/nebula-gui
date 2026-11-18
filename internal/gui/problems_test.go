@@ -30,7 +30,7 @@ func catalogue() []*problem {
 		}
 	}
 	return append(out,
-		serviceNotInstalled(), signOutNeeded(), serviceNotResponding(),
+		serviceNotInstalled(), restartNeeded(), serviceNotResponding(),
 		serviceTooOld(0, 1), appTooOld(2, 1),
 		noConfig(), notAConfig("notes.txt"),
 		fileMissing("key", "laptop.key"), fileUnreadable("key", "laptop.key"),
@@ -55,7 +55,7 @@ var setups = []serviceSetup{
 
 // allIDs lists every catalogue entry.
 var allIDs = []problemID{
-	probServiceNotRunning, probServiceNotInstalled, probStartFailed, probNoPermission, probSignOutNeeded, probServiceNotResponding, probServiceTooOld, probAppTooOld,
+	probServiceNotRunning, probServiceNotInstalled, probStartFailed, probNoPermission, probRestartNeeded, probServiceNotResponding, probServiceTooOld, probAppTooOld,
 	probNoConfig, probNotAConfig, probFileMissing, probFileUnreadable, probFileNotPEM, probPKIMissing,
 	probSSHDEnabled, probCertExpired, probCAExpired, probKeyMismatch, probWrongCA, probKeyEncrypted,
 	probConfigTooLarge, probConfigProblem,
@@ -156,6 +156,14 @@ func TestCatalogueNames(t *testing.T) {
 	}
 	if p := noPermission("linux"); !strings.Contains(p.Command, "usermod") {
 		t.Errorf("linux command = %q", p.Command)
+	}
+	// Signing out doesn't reliably apply a new group on Linux (the systemd
+	// user manager can keep the old ones), so the advice is to restart.
+	if p := noPermission("linux"); !strings.Contains(strings.Join(p.Steps, " "), "Restart") {
+		t.Errorf("linux steps = %q", p.Steps)
+	}
+	if p := restartNeeded(); !strings.Contains(p.Title, "Restart") {
+		t.Errorf("restart needed title = %q", p.Title)
 	}
 	if p := noPermission("darwin"); !strings.Contains(p.Command, "dseditgroup") {
 		t.Errorf("darwin command = %q", p.Command)

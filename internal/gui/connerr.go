@@ -21,7 +21,7 @@ func fromTransportError(err error, pc problemContext) *problem {
 	case isTimeout(err):
 		return serviceNotResponding()
 	case errnoIn(err, permissionErrnos) && pc.Setup.GroupPending:
-		return signOutNeeded()
+		return restartNeeded()
 	case errnoIn(err, permissionErrnos):
 		return noPermission(pc.GOOS)
 	case errnoIn(err, notRunningErrnos),
