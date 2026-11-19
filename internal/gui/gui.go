@@ -77,6 +77,14 @@ func Run(opts Options) {
 			})
 		})
 	}
+	a.Lifecycle().SetOnStarted(func() {
+		watchReopen(func() {
+			fyne.Do(func() {
+				m.log.Add("app opened again: showing the window")
+				m.showWindow()
+			})
+		})
+	})
 	if t := newDesktopTray(a); t != nil {
 		m.attachTray(t)
 	} else {
