@@ -1,0 +1,70 @@
+# @authorship: AI-Assisted
+# @architect: AI (Gemini 4 Hydrogen)
+#
+# Template for family devices (filesharing and limited service access).
+# Sign certificates with: nebula-cert sign -name ... -groups family
+#
+# Copy to ~/nebula-ca/config-template-family.yml, replace the example
+# lighthouse values, and build configs with:
+#   make-config.sh -t config-template-family.yml ca.crt family.crt family.key
+#
+# Don't add a pki section here, and keep sshd off: nebula-gui refuses
+# configs that turn the SSH console on.
+
+static_host_map:
+  "192.168.100.1": ["lighthouse.example.net:4242"]
+
+lighthouse:
+  am_lighthouse: false
+  interval: 60
+  hosts:
+    - "192.168.100.1"
+
+listen:
+  host: "[::]"
+  port: 0
+
+punchy:
+  punch: true
+
+relay:
+  relays:
+    - "192.168.100.1"
+  use_relays: true
+
+tun:
+  mtu: 1300
+
+logging:
+  level: info
+
+firewall:
+  outbound:
+    # family devices can reach your servers, your devices, and each other
+    - port: any
+      proto: any
+      group: server
+    - port: any
+      proto: any
+      group: admin
+    - port: any
+      proto: any
+      group: family
+  inbound:
+    # allow ping from you and family so nebula-gui can open tunnels
+    - port: any
+      proto: icmp
+      group: admin
+    - port: any
+      proto: icmp
+      group: family
+    # remote support access from your personal devices (remove or narrow to
+    # specific ports like 22/3389/5900 if not needed)
+    - port: any
+      proto: any
+      group: admin
+    # peer-to-peer filesharing between family devices (omit if all sharing
+    # goes through your server)
+    - port: 22000          # Syncthing
+      proto: any
+      group: family

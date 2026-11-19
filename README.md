@@ -41,6 +41,7 @@ The reasons for each choice are in [docs/decisions.md](docs/decisions.md).
 
 | Doc | Contents |
 |---|---|
+| [docs/network-setup.md](docs/network-setup.md) | Running a network for app users: CA, lighthouse, configs to hand out |
 | [docs/architecture.md](docs/architecture.md) | Components, process model, data flow |
 | [docs/ipc-api.md](docs/ipc-api.md) | The GUI ↔ service API contract |
 | [docs/development.md](docs/development.md) | Toolchain setup, repo layout, building and running |
