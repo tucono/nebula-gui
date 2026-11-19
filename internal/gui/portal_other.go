@@ -1,10 +1,9 @@
-//go:build !linux && !darwin
+//go:build !linux && !darwin && !windows
 
 // @authorship: AI-Assisted
 // @architect: AI (Claude Opus 5.5)
 
 package gui
 
-// platformOpen is nil until there's a native picker for this OS (Windows
-// comes with its installer); Fyne's picker is used meanwhile.
+// platformOpen is nil where there's no native picker; Fyne's is used.
 var platformOpen nativeOpenFunc
