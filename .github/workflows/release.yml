@@ -47,7 +47,7 @@ jobs:
           pkg_version=$(echo "$version" | sed 's/-/~/')
           ls -l
           for f in \
-            "nebula-gui_${pkg_version}_amd64.deb" \
+            "nebula-gui_${pkg_version}-1_amd64.deb" \
             "nebula-gui-${pkg_version}-1.x86_64.rpm" \
             "nebula-gui-${version}-macos-universal.pkg" \
             "nebula-gui-${version}-windows-amd64-setup.exe"; do
