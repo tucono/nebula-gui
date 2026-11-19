@@ -8,9 +8,11 @@
 | Package | What to test |
 |---|---|
 | `internal/api` | JSON round-tripping and backward compatibility (decoding with unknown fields) |
-| `internal/service` | The state machine, using a **fake engine** so no tun device or root is needed. Config validation, including rejecting path-based `pki.*` values. Config store, redaction, log buffer. Peers and close (dedup, errors), ping validation, rate limits and the RTT map, with a fake pinger (M3). |
+| `internal/service` | The state machine, using a **fake engine** so no tun device or root is needed. Config validation, including rejecting path-based `pki.*` values. Config store, redaction, log buffer. Peers and close (dedup, errors), ping validation, rate limits and the RTT map, with a fake pinger (M3). Settings and autoconnect: off by default and after an import, a damaged file, retries and what stops them, unknown fields refused (M4). |
+| `cmd/nebula-guid` | Argument handling, the start-up privilege check, and the Windows service handler's stop path with a fake `Serve` (M4). |
+| `internal/autostart` | Each OS's start-at-sign-in entry, written to a temp home; on Windows the Run value under a test key in HKCU, and an entry turned off in Task Manager (M4). |
 | `internal/pki` | Inlining PEM from relative paths, and extracting cert fields |
-| `internal/gui` | Logic (problem catalogue, status model, PEM inlining, log formatting, masking; in M3 the saved-peer store, peer rows, the Peers tab, Add peer checks, ping results and the report's Peers section) plus headless window tests with `fyne.io/fyne/v2/test` and a fake service. The troubleshooting report has golden files in `internal/gui/testdata/`, built from a synthetic service log that uses only documentation ranges and made-up names; run `go test ./internal/gui -run TestReportGolden -update` to rewrite them, and review the diff. |
+| `internal/gui` | Logic (problem catalogue, status model, PEM inlining, log formatting, masking; in M3 the saved-peer store, peer rows, the Peers tab, Add peer checks, ping results and the report's Peers section) plus headless window tests with `fyne.io/fyne/v2/test` and a fake service. M4 adds `trayModel`'s table test, the hidden-window poll rates, two in-process copies for the single-instance socket, the Settings tab and the installer-aware problems. The troubleshooting report has golden files in `internal/gui/testdata/`, built from a synthetic service log that uses only documentation ranges and made-up names; run `go test ./internal/gui -run TestReportGolden -update` to rewrite them, and review the diff. |
 
 `internal/service` depends on an interface, not on Nebula directly (`internal/service/engine.go`):
 
@@ -89,7 +91,7 @@ Unit and Fyne tests can't show how the window behaves on a real desktop: layout,
 - The window opens at its normal size, with nothing cut off or overlapping.
 - Resize the window smaller and larger. The content reflows or scrolls, and never slides under the title bar.
 - Every button reacts where the pointer is.
-- Closing the window quits the app.
+- Closing the window hides it in the tray (or quits the app, on a desktop without a tray). Quit from the tray or File → Quit ends it.
 
 Note which desktop and session the check ran on (for example COSMIC on Wayland), because compositors differ.
 
@@ -117,9 +119,29 @@ Start with `make lab-up`, `make dev-service` and `make gui`, and `testlab/lab.sh
 9. Disconnect. The tun device disappears (`ip link`). Only saved peers remain, all Not connected, with Ping disabled, and the result lines are gone. A report now says "None: Nebula isn't running." under Peers.
 10. Remove the config and import it again. The saved peers are still there.
 
+### Installer smoke tests (M4)
+
+CI installs and removes every package on each push ([development.md](development.md#testing-packages)). These are the checks it can't do, run by hand from a release candidate's draft release: the developer's COSMIC desktop for Linux, a Windows 10 VM reverted to a snapshot before each run, and a Mac that the uninstall script returns to a clean state. Stop `make dev-service` first on Linux, since both use Nebula's port and tun name.
+
+1. **Download** from the draft release and check the file against `SHA256SUMS`. Note the browser's and the OS's warnings, which the README's Install section must match.
+2. **Install** by double-clicking. The service runs (`systemctl status nebula-guid` as `nebula-guid`; `sudo launchctl print system/io.github.tucono.nebula-guid`; `sc.exe query nebula-guid`). On Linux, before restarting, the app shows **Restart your computer to finish**; after a restart it opens without a problem. On Windows and macOS it works at once.
+3. **Import a config** made with `testlab/` (started with `LAB_HOST` for a VM) or a real one, and connect. The tray shows Connected.
+4. **Close the window:** the app stays in the tray, with a notification the first time. Open the app again from the launcher or Start Menu: the same window comes back, and there's one copy (`pgrep -c nebula-gui`, Task Manager).
+5. **Reboot** with the config imported and the settings untouched: not connected, and Connect automatically is unticked. Turn it on, reboot, wait a minute before signing in, then sign in: already connected, and the service log shows "connecting automatically" from before the sign-in. Repeat with the lighthouse given by a DNS name.
+6. **Start at sign-in:** after the reboot the app is in the tray without its window.
+7. **Quit** from the tray: the first time, a dialog says the connection stays on. The tunnel stays up (`ip link`, `ifconfig`, `Get-NetAdapter`). Open the app: Connected.
+8. **Without a tray** (COSMIC with the tray applet removed from the panel): closing the window quits the app, and Settings doesn't offer start at sign-in.
+9. **Another account** (Windows: a non-admin account added with `net localgroup nebula-gui <name> /add`, then signed in) can use the app. An account not in the group gets the no-permission problem with the right command.
+10. **Help → About nebula-gui** shows the version and the notice, and **Open-source licenses** opens `THIRD_PARTY_NOTICES.txt`.
+11. **Upgrade** by installing a newer build over it: the connection comes back if it was up, and no one is granted access.
+12. **Uninstall:** the service and tun device are gone, the state directory remains. Then remove it (Linux: delete `/var/lib/nebula-gui`; macOS: `--remove-settings`; Windows: answer Yes) and check it's gone.
+
+In M4 these ran step by step as each installer was built, and the release candidates (`v0.1.0-rc.1` to `rc.3`) were then downloaded, installed and connected on all three. Findings: the release check expected the wrong `.deb` name (fixed), Defender quarantined an unsigned, stripped Windows build (fixed with version details and unstripped Windows builds), and the Windows VM needs Mesa for OpenGL ([platforms.md](platforms.md#windows)).
+
 ### Relay scenario (later)
 With every node on 127.0.0.1, direct UDP can't be blocked per host. Testing relays needs separate network namespaces or containers: block direct UDP between alice and the dev host, enable `relay.use_relays` and `am_relay` on the lighthouse, and check that the peer row shows `relayed: true`.
 
 ## CI
 - `go vet`, `golangci-lint`, and `go test ./...` on Linux, macOS, and Windows runners.
+- Every package built, installed, checked and removed on its own OS ([development.md](development.md#testing-packages)).
 - The real-Nebula tests above need no privileges, so they run in CI: `nebulactl.TestStartStop` on all three OSes, and `service.TestRealNebulaOverSocket` on Linux and macOS.

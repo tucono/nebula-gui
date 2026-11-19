@@ -11,7 +11,70 @@ A user loads a Nebula config. The app starts and stops the tunnel, shows which p
 
 > **Not an official Nebula project.** nebula-gui is an independent project. It is not affiliated with or endorsed by Slack or Defined Networking. Nebula is copyright Slack Technologies, Inc. and is MIT licensed. The installers include the licenses of Nebula and every other open-source part built in, in `THIRD_PARTY_NOTICES.txt`; the app opens it from Help → About nebula-gui.
 
-> **Status:** pre-alpha. The service embeds Nebula, and the GUI can import a config, connect and disconnect, show the service log, explain problems in plain language, and make a masked troubleshooting report (M2). It also lists peers under names the user chooses, pings them to open a tunnel, and closes stuck connections (M3). Installers and the tray (M4) aren't done yet, so for now the service is started by hand. See [docs/roadmap.md](docs/roadmap.md).
+> **Status:** pre-alpha. The service embeds Nebula, and the GUI can import a config, connect and disconnect, show the service log, explain problems in plain language, and make a masked troubleshooting report (M2). It also lists peers under names the user chooses, pings them to open a tunnel, and closes stuck connections (M3). Installers for Linux, Windows and macOS put the service in place and start it at boot; the app sits in the tray and can connect automatically when the computer starts (M4). Updates (M4.5) and signed installers (M5) come later. See [docs/roadmap.md](docs/roadmap.md).
+
+## Install
+
+Download the file for your computer from the [releases page](https://github.com/tucono/nebula-gui/releases), install it, then open nebula-gui and import the config the person who runs your network gave you.
+
+| Computer | File |
+|---|---|
+| Windows 10 or 11 (64-bit Intel/AMD) | `nebula-gui-<version>-windows-amd64-setup.exe` |
+| Mac, Apple silicon or Intel, macOS 11 or later | `nebula-gui-<version>-macos-universal.pkg` |
+| Ubuntu, Debian, Pop!_OS, Mint (64-bit Intel/AMD) | `nebula-gui_<version>-1_amd64.deb` |
+| Fedora (64-bit Intel/AMD) | `nebula-gui-<version>-1.x86_64.rpm` |
+
+The installers aren't signed yet (that's planned for v1.0), so Windows and macOS warn that they don't know who made them. The steps below get past those warnings. If you'd like to make sure the file is the one that was published, see [Checking a download](#checking-a-download) first.
+
+### Windows
+
+1. **Download.** Edge may say the file isn't commonly downloaded. Open the downloads list, click **⋯** next to the file, choose **Keep**, then **Keep anyway**.
+2. **Run it.** SmartScreen says "Windows protected your PC". Click **More info**, then **Run anyway**. Windows then asks for permission to make changes: click **Yes** (or ask someone with an administrator account to type their password).
+3. Follow the installer. At the end it opens nebula-gui. You can use the app straight away; other people who share the computer need to be added to the `nebula-gui` group (see [docs/platforms.md](docs/platforms.md#windows)).
+
+**To uninstall:** Settings → Apps, find nebula-gui, and choose Uninstall. It asks whether to remove your Nebula settings too; the default keeps them for a reinstall.
+
+### macOS
+
+1. **Download and open the `.pkg`.** macOS says it was "Not Opened" because "Apple could not verify" it "is free of malware". Click **Done** (not Move to Trash).
+2. Open **System Settings → Privacy & Security**. Near the bottom, next to a line about the nebula-gui package being blocked, click **Open Anyway**, then confirm with your password or Touch ID.
+   On macOS 14 and earlier you can instead right-click the `.pkg` in Finder, choose **Open**, then **Open** again.
+3. Follow the installer. It installs nebula-gui in Applications, starts the background service, and gives you access to it.
+
+**To uninstall:** run `sudo /usr/local/libexec/nebula-gui/uninstall.sh` in Terminal. Add `--remove-settings` to remove your imported config too. Dragging the app to the Trash leaves the background service running.
+
+### Linux
+
+1. **Install the package.** Double-clicking it opens your software centre, or use a terminal:
+   ```sh
+   sudo apt install ./nebula-gui_<version>-1_amd64.deb     # Ubuntu, Debian, Pop!_OS, Mint
+   sudo dnf install ./nebula-gui-<version>-1.x86_64.rpm    # Fedora
+   ```
+2. **Restart the computer.** The installer adds you to the `nebula-gui` group, which takes effect after a restart (signing out isn't always enough). Until then the app says "Restart your computer to finish".
+3. Open nebula-gui from your applications menu. The tray icon needs a desktop with a system tray; on GNOME that means the AppIndicator extension (Ubuntu has it already). Without one the app works as a normal window.
+
+Other people who share the computer: `sudo usermod -aG nebula-gui <their login name>`, then they restart too.
+
+**To uninstall:** `sudo apt remove nebula-gui` or `sudo dnf remove nebula-gui`. Your imported config stays in `/var/lib/nebula-gui`; delete that directory to remove it.
+
+### Checking a download
+
+Each release has a `SHA256SUMS` file listing the SHA-256 hash of every file in it. Download it into the same folder as the installer, then:
+
+| Computer | Command | Look for |
+|---|---|---|
+| Linux | `sha256sum -c SHA256SUMS --ignore-missing` | `<file>: OK` |
+| macOS (Terminal) | `shasum -a 256 -c SHA256SUMS --ignore-missing` | `<file>: OK` |
+| Windows (PowerShell) | `Get-FileHash .\nebula-gui-<version>-windows-amd64-setup.exe` | the same hash as the `.exe`'s line in `SHA256SUMS` (case doesn't matter) |
+
+This shows the file wasn't damaged or swapped after it was published. Since `SHA256SUMS` comes from the same page, it can't protect against someone who controls the releases page; for that, compare the hash with one the person who runs your network sends you another way.
+
+### After installing
+
+- **Import config…** on the Status tab, then **Connect**.
+- Closing the window leaves nebula-gui in the tray; the connection stays up even when the app is quit. To end it, **Disconnect** first.
+- The **Settings** tab has **Connect automatically when this computer starts** (off until you turn it on) and **Open nebula-gui when I sign in**.
+- If something's wrong, the app explains it. **Get help…** makes a report you can paste into an AI assistant or send to the person who runs your network.
 
 ## Goals
 
@@ -46,9 +109,9 @@ The reasons for each choice are in [docs/decisions.md](docs/decisions.md).
 | [docs/network-setup.md](docs/network-setup.md) | Running a network for app users: CA, lighthouse, configs to hand out |
 | [docs/architecture.md](docs/architecture.md) | Components, process model, data flow |
 | [docs/ipc-api.md](docs/ipc-api.md) | The GUI ↔ service API contract |
-| [docs/development.md](docs/development.md) | Toolchain setup, repo layout, building and running |
+| [docs/development.md](docs/development.md) | Toolchain setup, repo layout, building and running, packages and releases |
 | [docs/testing.md](docs/testing.md) | Unit tests and a local multi-node Nebula test lab |
-| [docs/platforms.md](docs/platforms.md) | Per-OS notes (Wintun, systemd, launchd, mobile) |
+| [docs/platforms.md](docs/platforms.md) | What each installer sets up per OS, known issues, mobile |
 | [docs/updates.md](docs/updates.md) | Update checks, the signed manifest, installing on each OS |
 | [docs/security.md](docs/security.md) | Threat model and service hardening rules |
 | [docs/decisions.md](docs/decisions.md) | Architecture decision records |

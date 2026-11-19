@@ -39,17 +39,20 @@ Detailed plan: [m3-plan.md](m3-plan.md).
 ## M4: Desktop integration and packaging
 Detailed plan: [m4-plan.md](m4-plan.md).
 
-- [ ] System tray menu, plus closing the window keeps the app running in the tray
-- [ ] Service install and uninstall: systemd unit, launchd plist, Windows Service
-- [ ] Installers: `.deb`/`.rpm` (nfpm), `.pkg` (macOS), MSI or Inno Setup (Windows, bundling wintun.dll)
-- [ ] Autoconnect at boot setting
+- [x] System tray menu, plus closing the window keeps the app running in the tray
+- [x] One copy of the app at a time; opening it again shows the running window
+- [x] Service install and uninstall: systemd unit (its own user, ADR-007), launchd plist, Windows Service
+- [x] Installers: `.deb`/`.rpm` (nfpm), `.pkg` (macOS), Inno Setup (Windows, bundling wintun.dll; ADR-008)
+- [x] Settings tab: autoconnect at boot, and start at sign-in
+- [x] Release workflow: a draft GitHub release with the packages and `SHA256SUMS` from a version tag
+- [x] Third-party license notices in every package, and an About dialog
 
 ## M4.5: Updates (needs M4 installers + signing)
 - [ ] Release pipeline produces `manifest.json` + `.minisig` and attaches them to GitHub releases
 - [ ] Service: scheduled and manual checks, upstream slackhq/nebula notice
-- [ ] Service: download, verify (signature, hash, no downgrade, platform signature), run the installer
+- [ ] Service: download, verify (signature, hash, no downgrade, platform signature), run the installer (Windows: the setup `.exe` silently; macOS: `installer`)
 - [ ] Resume the connection after an update (`resume-after-update` marker)
-- [ ] Detect package-manager installs on Linux and only notify
+- [ ] Linux: notify only, whatever the source; hand the verified package to the desktop's software installer (ADR-007)
 - [ ] GUI: Updates settings, banner and tray notification, install now or when disconnected, skip version
 - [ ] Tests: manifest signing and verification, downgrade refusal, a fake feed server in the test lab
 

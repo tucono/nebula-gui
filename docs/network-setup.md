@@ -100,7 +100,8 @@ This writes `config-alice-laptop.yml`, readable only by you: the template with t
 The config contains the device's private key. Treat it like a password:
 
 - Hand it over **in person** (USB stick) or through an **end-to-end encrypted messenger** such as Signal. Not email, SMS or a shared cloud folder.
-- Tell the person: install nebula-gui, click **Import config…**, pick the file, then **Connect**. After importing they can delete the file; the app keeps its own protected copy.
+- Tell the person: install nebula-gui ([README → Install](../README.md#install) walks them past the unsigned-installer warnings), click **Import config…**, pick the file, then **Connect**. After importing they can delete the file; the app keeps its own protected copy.
+- If they want to check the installer, send them its line from the release's `SHA256SUMS` along with the config, so the hash doesn't come only from the download page ([Checking a download](../README.md#checking-a-download)).
 - Delete your copy of the config once it's imported. You can always build it again from the certificate and key, or sign a new certificate.
 
 If something goes wrong, the person can use **Get help…** in the app and send you the report. Ticking **Include network details** gives you the real names and addresses.

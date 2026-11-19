@@ -16,10 +16,49 @@ The service runs with high privileges and accepts requests from local processes.
 | `sshd` debug console enabled by an imported config | `PUT /v1/config` rejects any `sshd.enabled` other than `false`. The console gives deep control over Nebula. |
 | The private key leaks through the API or logs | `GET /v1/config` redacts `pki.key`. Never log the config. The state directory is `0700` and the files are `0600`, log files included. A test runs a real Nebula with the log file at debug level and scans it for key material. |
 | Ping is used as a scanning or flooding tool | `count` 1–10, `timeout_ms` at most 15000, at most 4 pings in flight (one per peer) and 60 per minute, and only IPs inside this host's cert networks, never its own. |
-| An old or tampered service binary | Sign releases. The GUI checks `api_version` and shows the service version. |
+| An old or tampered service binary | The GUI checks `api_version` and shows the service version. Until code signing (M5), each release carries `SHA256SUMS` ([Releases and installers](#releases-and-installers)). |
+| A second copy of the GUI, or another program, drives the running GUI | The single-instance socket accepts one message, `show`, from the same user only ([One copy of the GUI](#one-copy-of-the-gui)). |
 | **The updater is used to install malicious code as root/SYSTEM** | The manifest is signed with a minisign key whose public half is built into the binary. The artifact's SHA-256 must match the signed manifest. Platform code signatures are checked. Downgrades are refused. The feed URL can't be set over IPC, and the install endpoint takes only a version string ([updates.md](updates.md#verification-all-must-pass-before-installing)). |
 | A downloaded installer is swapped before it runs | Downloads go to the service's `0700` state directory. The hash is checked again immediately before running the installer. |
 | Privacy of update checks | The check sends only a plain HTTPS request to GitHub, with no identifiers or telemetry. Automatic checks can be turned off. |
+
+## The installed service
+
+### Privileges
+
+| | Runs as | Can |
+|---|---|---|
+| Linux | the system user `nebula-guid`, not root | only `CAP_NET_ADMIN` and `CAP_NET_RAW` (ambient and bounding set), with `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp` and only `/dev/net/tun` among devices. It can change networking and send ICMP, but can't read users' files, write system files outside its own directories, or install software. |
+| macOS | root (launchd daemon) | everything; `utun` needs root. |
+| Windows | LocalSystem | everything; Wintun needs SYSTEM. |
+
+Nebula handles UDP from the internet and the API takes requests from every member of `nebula-gui`, so on Linux a bug in either reaches a process that can't take over the machine. The price is that the Linux service can't install updates (ADR-007 in [decisions.md](decisions.md)).
+
+### Who can use the socket or pipe
+
+| | Address | Access |
+|---|---|---|
+| Linux | `/run/nebula-gui/nebula-guid.sock` | owner `nebula-guid`, group `nebula-gui`, mode `0660` |
+| macOS | `/var/run/nebula-guid.sock` | owner root, group `nebula-gui`, mode `0660` |
+| Windows | `\\.\pipe\nebula-guid` | a protected DACL: SYSTEM and Administrators full access; the `nebula-gui` group and the installing user read and write |
+
+Being in `nebula-gui` means being able to connect, disconnect, import or delete the config, change **Connect automatically**, ping and close tunnels: everything the API offers. It doesn't give access to the private key, which `GET /v1/config` redacts.
+
+- **Who is added:** only a fresh install adds anyone, and only the person installing: on Linux `$SUDO_USER`, the user behind `$PKEXEC_UID`, or the active session's user on `seat0`; on macOS the console user; on Windows the person signed in to the installer's session. An upgrade never grants access, since it's often run by someone else. Everyone else is added by an administrator ([platforms.md](platforms.md)).
+- **Autoconnect** applies to every user of the computer and connects before anyone signs in. It's off after every install and upgrade; only a `PUT /v1/settings` turns it on.
+- **The state directory** (`/var/lib/nebula-gui`, `/Library/Application Support/nebula-gui`, `%ProgramData%\nebula-gui`) is `0700` with `0600` files, or SYSTEM and Administrators only on Windows. It holds the config with its private key, the settings and the service log. Uninstalling keeps it unless asked to remove it, so a removed app can leave a key behind; the README and [platforms.md](platforms.md) say how to remove it.
+
+### One copy of the GUI
+
+The GUI listens on a per-user socket so a second copy can ask the first to show its window: `$XDG_RUNTIME_DIR/nebula-gui/gui.sock` (Linux) or `os.UserCacheDir()/nebula-gui/gui.sock` (macOS) in a `0700` directory with a `0600` socket, or on Windows `\\.\pipe\nebula-gui-<user SID>` with a DACL for that user only, not SYSTEM or Administrators. It reads one line: `show` shows the window; anything else is ignored. It can't be used to connect, read status or reach the service.
+
+### Releases and installers
+
+- **Built in CI from a tag**, by `.github/workflows/release.yml` with only `contents: write` and no secrets. It makes a **draft** release; a person publishes it.
+- **Not signed until M5.** Windows (Edge, SmartScreen) and macOS (Gatekeeper) warn, and the README walks people past the warnings. On macOS the app and service are signed ad hoc, which Apple silicon requires, but that proves nothing about who built them. Windows builds keep their symbols and carry version details, which stopped Defender's machine-learning scan from quarantining the installer as `Program:Win32/Wacapew.A!ml`; signing is the lasting fix.
+- **`SHA256SUMS`** lists every file in the release. It shows a download wasn't damaged or swapped on the way, but it sits on the same page as the files, so it doesn't help against someone who controls the release. For that, the person who runs the network can send the hash another way.
+- **Wintun** isn't committed. CI downloads it from wintun.net and refuses it unless its SHA-256 matches `packaging/windows/wintun.sha256` (version 0.14.1).
+- **Dependencies' licenses** ship as `THIRD_PARTY_NOTICES.txt`, generated from the modules actually built in ([development.md](development.md#packages)).
 
 ## Service log file
 

@@ -5,6 +5,8 @@
 
 Detailed plan for the [M4 roadmap items](roadmap.md#m4-desktop-integration-and-packaging).
 
+**Status:** done, 2026-11-19. This is the plan as written; where the build differs, [platforms.md](platforms.md), [development.md](development.md#packages) and ADR-007/008 in [decisions.md](decisions.md) describe what was built.
+
 ## What M4 delivers
 
 At the end of M4, someone on the network gets a **download, not a build**: they install one package, and the app works like any other desktop app.
