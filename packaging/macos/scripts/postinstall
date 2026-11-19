@@ -1,0 +1,52 @@
+#!/bin/sh
+# @authorship: AI-Assisted
+# @architect: AI (Claude Opus 5.5)
+#
+# Runs, as root, after the .pkg's files are in place. It creates the
+# nebula-gui group, adds the person at the screen to it on a fresh
+# install, and starts the service.
+
+group=nebula-gui
+label=io.github.tucono.nebula-guid
+plist=/Library/LaunchDaemons/$label.plist
+marker=/var/run/nebula-gui-pkg-upgrade
+
+if [ -f "$marker" ]; then
+	fresh=
+	rm -f "$marker"
+else
+	fresh=1
+fi
+
+if ! dseditgroup -o read "$group" >/dev/null 2>&1; then
+	if ! dseditgroup -o create -r "People who may use the nebula-gui app" "$group"; then
+		echo "nebula-gui: couldn't create the $group group" >&2
+		exit 1
+	fi
+fi
+
+# Only a fresh install grants access: an upgrade is often run by someone
+# else, who shouldn't gain it as a side effect. The person at the screen
+# is the one who'll use the app, even when an administrator typed their
+# password to install it.
+if [ -n "$fresh" ]; then
+	name=$(stat -f%Su /dev/console 2>/dev/null)
+	case "$name" in
+	"" | root | loginwindow | _mbsetupuser)
+		echo "nebula-gui: add each person who'll use the app to the $group group:"
+		echo "  sudo dseditgroup -o edit -a <name> -t user $group"
+		;;
+	*)
+		if dseditgroup -o edit -a "$name" -t user "$group"; then
+			echo "nebula-gui: added $name to the $group group."
+		else
+			echo "nebula-gui: couldn't add $name to the $group group" >&2
+		fi
+		;;
+	esac
+fi
+
+if ! launchctl bootstrap system "$plist"; then
+	echo "nebula-gui: couldn't start the service; see /var/log/nebula-guid.log" >&2
+fi
+exit 0

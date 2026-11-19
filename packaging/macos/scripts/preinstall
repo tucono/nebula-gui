@@ -1,0 +1,21 @@
+#!/bin/sh
+# @authorship: AI-Assisted
+# @architect: AI (Claude Opus 5.5)
+#
+# Runs, as root, before the .pkg's files are put in place. On an upgrade
+# it stops the service, which stops Nebula, and quits the app in every
+# session, so both can be replaced. It leaves a note for postinstall,
+# which grants access only on a fresh install.
+
+label=io.github.tucono.nebula-guid
+plist=/Library/LaunchDaemons/$label.plist
+marker=/var/run/nebula-gui-pkg-upgrade
+
+if [ -f "$plist" ]; then
+	touch "$marker"
+	launchctl bootout "system/$label" 2>/dev/null || true
+else
+	rm -f "$marker"
+fi
+pkill -x nebula-gui 2>/dev/null || true
+exit 0

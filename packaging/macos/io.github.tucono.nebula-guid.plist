@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+<!--
+  The service's launch daemon, installed to /Library/LaunchDaemons. launchd
+  runs it as root at boot and restarts it if it exits. Its socket is
+  /var/run/nebula-guid.sock, root:nebula-gui 0660.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.github.tucono.nebula-guid</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/libexec/nebula-gui/nebula-guid</string>
+		<string>--socket-group</string>
+		<string>nebula-gui</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/var/log/nebula-guid.log</string>
+</dict>
+</plist>

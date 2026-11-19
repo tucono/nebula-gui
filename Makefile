@@ -14,7 +14,7 @@ RELEASE_LDFLAGS := -s -w -X main.version=$(RELEASE_VERSION)
 NFPM            ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.49.0
 ISCC            ?= C:/Program Files (x86)/Inno Setup 6/ISCC.exe
 
-.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons package-linux package-windows
+.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons package-linux package-macos package-windows
 
 ## build: build both binaries into bin/
 build:
@@ -60,6 +60,14 @@ package-linux: icons
 	go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/linux/nebula-gui ./cmd/nebula-gui
 	PKG_VERSION="$(PKG_VERSION)" $(NFPM) package --config packaging/linux/nfpm.yaml --packager deb --target dist/
 	PKG_VERSION="$(PKG_VERSION)" $(NFPM) package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
+
+## package-macos: build the universal .pkg into dist/ (run on a Mac with the Xcode command line tools)
+package-macos: icons
+	for arch in amd64 arm64; do \
+		CGO_ENABLED=0 GOARCH=$$arch go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/macos/$$arch/nebula-guid ./cmd/nebula-guid && \
+		CGO_ENABLED=1 GOARCH=$$arch MACOSX_DEPLOYMENT_TARGET=11.0 go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/macos/$$arch/nebula-gui ./cmd/nebula-gui || exit 1; \
+	done
+	packaging/macos/build-pkg.sh "$(RELEASE_VERSION)"
 
 ## package-windows: build the setup .exe into dist/ (amd64; run on Windows with Inno Setup 6, from bash)
 package-windows: icons

@@ -267,7 +267,13 @@ Release URLs must work without signing in, which GitHub release assets on a publ
 
 ### 9. macOS package
 
-**Files:** `packaging/macos/` (plist, `Distribution.xml`, scripts, uninstall script), `Makefile` (`package-macos`).
+**Files:** `packaging/macos/` (`io.github.tucono.nebula-guid.plist`, `Info.plist`, `Distribution.xml`, `scripts/preinstall`, `scripts/postinstall`, `uninstall.sh`, `build-pkg.sh`, `check-install.sh`), `Makefile` (`package-macos`), `.github/workflows/ci.yml`.
+
+- `make package-macos` (on a Mac) builds both binaries for amd64 and arm64 (the GUI with cgo, `MACOSX_DEPLOYMENT_TARGET=11.0`), and `build-pkg.sh` joins them with `lipo`, makes the app bundle by hand (`Info.plist`, the ICNS from `make icons`; no `fyne package`), signs the app and service ad hoc (Apple silicon runs only signed code; a Developer ID is M5), and runs `pkgbuild` and `productbuild`. The package is `dist/nebula-gui-<version>-macos-universal.pkg`, for macOS 11 or later.
+- Payload: `/Applications/nebula-gui.app`, `/usr/local/libexec/nebula-gui/{nebula-guid,uninstall.sh}`, `/Library/LaunchDaemons/io.github.tucono.nebula-guid.plist`. The app isn't relocatable, so the installer never updates a development build found elsewhere.
+- `preinstall`: on an upgrade (the daemon's plist exists) leaves a note for `postinstall` and boots the daemon out; it quits the app in every session either way. `postinstall`: creates the `nebula-gui` group (`dseditgroup`), on a fresh install adds the console user, and bootstraps the daemon. Its stderr goes to `/var/log/nebula-guid.log`.
+- `sudo /usr/local/libexec/nebula-gui/uninstall.sh [--remove-settings]`: boots the daemon out, quits the app, removes the files, each user's start-at-sign-in LaunchAgent (it would point at the removed app) and the package receipt. `--remove-settings` also removes the state directory and the group.
+- CI (`package-macos` job): builds on `macos-latest`, installs with `installer`, checks the files, universal binaries, signature, daemon, socket owner and mode, and the API (as root, as the console user, refused to `nobody`), then uninstalls twice: keeping the settings, then with `--remove-settings`.
 
 ### 10. Release workflow
 

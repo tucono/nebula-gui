@@ -64,7 +64,7 @@ jobs:
           sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
 
       - name: Check the package scripts
-        run: shellcheck packaging/version.sh packaging/linux/*.sh
+        run: shellcheck packaging/version.sh packaging/linux/*.sh packaging/macos/*.sh packaging/macos/scripts/*
 
       - name: Build the packages
         run: make package-linux
@@ -97,6 +97,53 @@ jobs:
           path: |
             dist/*.deb
             dist/*.rpm
+          retention-days: 7
+
+  # The macOS installer, a universal .pkg, installed on the runner (where
+  # launchd really starts the service), then removed twice: keeping the
+  # settings, then removing them.
+  package-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # packaging/version.sh counts commits and reads tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build the package
+        run: make package-macos
+
+      - name: Install and check
+        run: |
+          sudo installer -verbose -pkg dist/nebula-gui-*-macos-universal.pkg -target /
+          sudo packaging/macos/check-install.sh installed
+
+      - name: Uninstall, keeping the settings, and check
+        run: |
+          sudo /usr/local/libexec/nebula-gui/uninstall.sh
+          sudo packaging/macos/check-install.sh removed
+
+      - name: Reinstall, uninstall with --remove-settings, and check
+        run: |
+          sudo installer -pkg dist/nebula-gui-*-macos-universal.pkg -target /
+          sudo packaging/macos/check-install.sh installed
+          sudo /usr/local/libexec/nebula-gui/uninstall.sh --remove-settings
+          sudo packaging/macos/check-install.sh purged
+
+      - name: Show the logs
+        if: always()
+        run: |
+          grep -i nebula /var/log/install.log | tail -50 || true
+          sudo cat /var/log/nebula-guid.log 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-package
+          path: dist/*.pkg
           retention-days: 7
 
   # The Windows installer, installed silently on the runner (an

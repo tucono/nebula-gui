@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+<!--
+  The product archive's description, for productbuild. build-pkg.sh fills
+  in the version. One package, installed to the startup disk, for Intel
+  and Apple silicon Macs on macOS 11 or later.
+-->
+<installer-gui-script minSpecVersion="2">
+	<title>nebula-gui</title>
+	<options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+	<domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
+	<volume-check>
+		<allowed-os-versions>
+			<os-version min="11.0"/>
+		</allowed-os-versions>
+	</volume-check>
+	<choices-outline>
+		<line choice="default">
+			<line choice="io.github.tucono.nebula-gui"/>
+		</line>
+	</choices-outline>
+	<choice id="default"/>
+	<choice id="io.github.tucono.nebula-gui" visible="false">
+		<pkg-ref id="io.github.tucono.nebula-gui"/>
+	</choice>
+	<pkg-ref id="io.github.tucono.nebula-gui" version="@VERSION@" onConclusion="none">nebula-gui-component.pkg</pkg-ref>
+</installer-gui-script>
