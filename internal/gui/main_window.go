@@ -112,8 +112,9 @@ type mainWindow struct {
 	// nativeOpen shows the OS's file picker; nil uses Fyne's. Tests
 	// replace it.
 	nativeOpen nativeOpenFunc
-	// picking is set while the native picker is open, which doesn't
-	// block the window the way Fyne's modal picker does.
+	// picking is set while the native picker is open, which may not
+	// block the window the way Fyne's modal picker does (the portal's
+	// doesn't; the macOS sheet does).
 	picking bool
 	// noNative is set once the native picker has failed to open.
 	noNative bool

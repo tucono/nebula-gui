@@ -153,10 +153,10 @@ func (m *mainWindow) fyneSavePicker(req openRequest, done func(path string)) {
 }
 
 // windowHandle identifies the window to the OS, so the native picker can
-// sit on top of it. It's empty where there's no handle to give: the XDG
-// portal takes "x11:<id>", and a Wayland handle needs the xdg_foreign
-// protocol, which Fyne doesn't offer. The picker still works without it,
-// as a separate window.
+// sit on top of it. The XDG portal takes "x11:<id>"; macOS gets
+// "nswindow:<pointer>". It's empty where there's no handle to give: a
+// Wayland handle needs the xdg_foreign protocol, which Fyne doesn't offer.
+// The picker still works without it, as a separate window.
 func (m *mainWindow) windowHandle() string {
 	nw, ok := m.w.(driver.NativeWindow)
 	if !ok {
@@ -164,8 +164,15 @@ func (m *mainWindow) windowHandle() string {
 	}
 	var h string
 	nw.RunNative(func(ctx any) {
-		if x, ok := ctx.(driver.X11WindowContext); ok && x.WindowHandle != 0 {
-			h = fmt.Sprintf("x11:%x", x.WindowHandle)
+		switch c := ctx.(type) {
+		case driver.X11WindowContext:
+			if c.WindowHandle != 0 {
+				h = fmt.Sprintf("x11:%x", c.WindowHandle)
+			}
+		case driver.MacWindowContext:
+			if c.NSWindow != 0 {
+				h = fmt.Sprintf("nswindow:%x", c.NSWindow)
+			}
 		}
 	})
 	return h
