@@ -34,7 +34,8 @@ no_group() { ! has_group; }
 universal() {
 	archs=$(lipo -archs "$1" 2>/dev/null)
 	echo "      $1: $archs"
-	case " $archs " in *" x86_64 "*" arm64 "* | *" arm64 "*" x86_64 "*) ;; *) return 1 ;; esac
+	case " $archs " in *" x86_64 "*) ;; *) return 1 ;; esac
+	case " $archs " in *" arm64 "*) ;; *) return 1 ;; esac
 }
 mode_owner() {
 	got=$(stat -f '%Lp %Su:%Sg' "$1" 2>/dev/null)
@@ -55,7 +56,7 @@ status() {
 		curl -s -o /dev/null -w '%{http_code}' --unix-socket "$sock" http://nebula-guid/v1/status
 	fi
 }
-answers() { [ "$(status "${1:-}")" = 200 ]; }
+answers() { [ "$(status "$1")" = 200 ]; }
 refuses() { [ "$(status "$1")" != 200 ]; }
 
 case "${1:-}" in
@@ -72,13 +73,13 @@ installed)
 
 	# The postinstall script started it; give it a moment to listen.
 	i=0
-	while [ $i -lt 20 ] && ! answers; do
+	while [ $i -lt 20 ] && ! answers ""; do
 		sleep 0.5
 		i=$((i + 1))
 	done
 	check "service running" job_running
 	check "socket" mode_owner "$sock" "660 root:$group"
-	check "API answers root" answers
+	check "API answers root" answers ""
 	check "state directory" test -d "$state"
 	check "state directory is private" sh -c "stat -f '%Lp %Su' '$state' | grep -qx '700 root'"
 
