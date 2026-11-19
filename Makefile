@@ -11,8 +11,12 @@ DEV_STATE  ?= .dev-state
 RELEASE_VERSION ?= $(shell packaging/version.sh)
 PKG_VERSION     ?= $(shell packaging/version.sh --package)
 RELEASE_LDFLAGS := -s -w -X main.version=$(RELEASE_VERSION)
+# Windows builds keep their symbols: Defender's machine-learning scan flags
+# stripped, unsigned Go programs.
+WIN_LDFLAGS     := -X main.version=$(RELEASE_VERSION)
 NFPM            ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.49.0
 ISCC            ?= C:/Program Files (x86)/Inno Setup 6/ISCC.exe
+WINRES          ?= go run github.com/tc-hib/go-winres@v0.3.3
 
 .PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons package-linux package-macos package-windows
 
@@ -72,8 +76,14 @@ package-macos: icons
 ## package-windows: build the setup .exe into dist/ (amd64; run on Windows with Inno Setup 6, from bash)
 package-windows: icons
 	powershell -NoProfile -ExecutionPolicy Bypass -File packaging/windows/fetch-wintun.ps1 -OutDir dist/windows
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/windows/nebula-guid.exe ./cmd/nebula-guid
-	go build -trimpath -ldflags "$(RELEASE_LDFLAGS) -H=windowsgui" -o dist/windows/nebula-gui.exe ./cmd/nebula-gui
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(WIN_LDFLAGS)" -o dist/windows/nebula-guid.exe ./cmd/nebula-guid
+	go build -trimpath -ldflags "$(WIN_LDFLAGS) -H=windowsgui" -o dist/windows/nebula-gui.exe ./cmd/nebula-gui
+	# Version details, icon and manifest, from packaging/windows/*.winres.json.
+	for exe in nebula-gui nebula-guid; do \
+		$(WINRES) patch --no-backup --in packaging/windows/$$exe.winres.json \
+			--file-version "$(RELEASE_VERSION)" --product-version "$(RELEASE_VERSION)" \
+			dist/windows/$$exe.exe || exit 1; \
+	done
 	MSYS2_ARG_CONV_EXCL="*" "$(ISCC)" /Q /DAppVersion=$(RELEASE_VERSION) /DNumVersion=$(firstword $(subst -, ,$(RELEASE_VERSION))) packaging/windows/nebula-gui.iss
 
 lint:

@@ -51,6 +51,11 @@ switch ($State) {
         }
         $ver = & (Join-Path $app 'nebula-guid.exe') --version
         Check ($LASTEXITCODE -eq 0 -and $ver) "nebula-guid --version: $ver"
+        # The version details from packaging/windows/*.winres.json.
+        foreach ($exe in 'nebula-gui', 'nebula-guid') {
+            $info = (Get-Item (Join-Path $app "$exe.exe")).VersionInfo
+            Check ($info.OriginalFilename -eq "$exe.exe" -and $info.ProductVersion) "$exe.exe details: $($info.FileDescription), $($info.ProductVersion)"
+        }
         Check (Test-Path (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\nebula-gui.lnk')) 'Start Menu shortcut'
 
         Check ($null -ne $service) 'service registered'
