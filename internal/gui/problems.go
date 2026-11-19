@@ -202,7 +202,16 @@ func noPermission(goos string) *problem {
 	}
 	switch goos {
 	case "windows":
-		p.Steps = []string{"Reinstall the app and choose your user account during setup."}
+		// The installer grants only the person who installed it; anyone
+		// else is added to the group, which takes effect at the next
+		// sign-in. %USERNAME% is right only in the user's own elevated
+		// prompt: one opened with someone else's password runs as them.
+		p.Explain = "Your user account needs to be added to the nebula-gui group before it can control the Nebula connection."
+		p.Steps = []string{
+			"Ask someone with an administrator account on this computer to add you to the nebula-gui group. If your own account is an administrator, open Command Prompt with Run as administrator and run the command below.",
+			"Sign out of Windows and back in.",
+		}
+		p.Command = `net localgroup nebula-gui "%USERNAME%" /add`
 	default:
 		p.Explain = "Your user account needs to be added to the nebula-gui group before it can control the Nebula connection."
 		if goos == "darwin" {

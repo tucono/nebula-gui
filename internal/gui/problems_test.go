@@ -168,7 +168,10 @@ func TestCatalogueNames(t *testing.T) {
 	if p := noPermission("darwin"); !strings.Contains(p.Command, "dseditgroup") {
 		t.Errorf("darwin command = %q", p.Command)
 	}
-	if p := noPermission("windows"); p.Command != "" || !strings.Contains(p.Steps[0], "Reinstall") {
+	// Reinstalling never grants access (an upgrade keeps the service's
+	// registration), so the advice is the group.
+	if p := noPermission("windows"); !strings.Contains(p.Command, "net localgroup nebula-gui") ||
+		!strings.Contains(strings.Join(p.Steps, " "), "Sign out") {
 		t.Errorf("windows = %+v", p)
 	}
 	if p := tunUnavailable("windows"); !strings.Contains(p.Explain, "Wintun") {
