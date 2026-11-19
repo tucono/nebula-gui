@@ -66,13 +66,22 @@
      id="layer3"
      inkscape:label="Layer 3"
      style="stroke:#005522">
+    <!-- The N is filled shapes, not a stroked line: macOS template icons
+         are recoloured by filling every path, which would close a line. -->
     <path
-       style="fill:none;fill-opacity:1;stroke:#217821;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-       d="m 28.601709,73.593603 c 0,-17.239983 0,-34.479964 0,-51.719946 0,0 46.669562,51.719946 46.669562,51.719946 0,-17.239982 0,-34.479962 0,-51.719946"
-       id="path5"
-       inkscape:path-effect="#path-effect5"
-       inkscape:original-d="m 28.601709,73.593603 c 0,-17.239983 0,-51.719946 0,-51.719946 l 46.669562,51.719946 c 0,0 0,-34.479962 0,-51.719946"
-       sodipodi:nodetypes="cccc"
+       style="fill:#217821;fill-opacity:1;stroke:none"
+       d="M 25.601709,21.873657 H 31.601709 V 73.593603 H 25.601709 Z"
+       id="path5-left"
+       transform="translate(-4.3114902,-0.10863113)" />
+    <path
+       style="fill:#217821;fill-opacity:1;stroke:none"
+       d="M 26.374433,23.883443 L 30.828985,19.863871 L 77.498547,71.583817 L 73.043995,75.603389 Z"
+       id="path5-diagonal"
+       transform="translate(-4.3114902,-0.10863113)" />
+    <path
+       style="fill:#217821;fill-opacity:1;stroke:none"
+       d="M 72.271271,21.873657 H 78.271271 V 73.593603 H 72.271271 Z"
+       id="path5-right"
        transform="translate(-4.3114902,-0.10863113)" />
   </g>
   <g
