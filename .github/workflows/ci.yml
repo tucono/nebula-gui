@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, monolithic]
   pull_request:
+  # release.yml runs these jobs on a tag and releases the packages they
+  # built and checked.
+  workflow_call:
 
 permissions:
   contents: read

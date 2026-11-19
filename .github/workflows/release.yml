@@ -1,0 +1,86 @@
+name: Release
+
+# On a pushed version tag: run CI (tests and the three package jobs, which
+# install and check each package), then put the packages and SHA256SUMS in
+# a draft release. Publishing the draft is a manual step. No secrets: the
+# release needs only the workflow's own token.
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: '{linux-packages,macos-package,windows-installer}'
+          path: dist
+          merge-multiple: true
+
+      # Fails if packaging/version.sh didn't pick up the tag, which would
+      # give dev versions.
+      - name: Check the packages carry the tag's version
+        working-directory: dist
+        run: |
+          version=${TAG#v}
+          pkg_version=$(echo "$version" | sed 's/-/~/')
+          ls -l
+          for f in \
+            "nebula-gui_${pkg_version}_amd64.deb" \
+            "nebula-gui-${pkg_version}-1.x86_64.rpm" \
+            "nebula-gui-${version}-macos-universal.pkg" \
+            "nebula-gui-${version}-windows-amd64-setup.exe"; do
+            [ -f "$f" ] || { echo "missing: $f"; exit 1; }
+          done
+          [ "$(ls | wc -l)" -eq 4 ] || { echo "expected exactly 4 files"; exit 1; }
+
+      # The package versions keep "~" so dpkg and rpm sort a pre-release
+      # before its release, but GitHub renames "~" in asset names, which
+      # would break SHA256SUMS. Only the file names change.
+      - name: Rename pre-release packages
+        working-directory: dist
+        run: |
+          for f in *~*; do
+            [ -e "$f" ] || continue
+            mv -v "$f" "${f//\~/-}"
+          done
+
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create the draft release
+        run: |
+          prerelease=
+          case "$TAG" in *-*) prerelease=--prerelease ;; esac
+          cat > notes.md <<EOF
+          Install notes are in the README. To check a download, put it next to
+          \`SHA256SUMS\` and run \`sha256sum -c SHA256SUMS --ignore-missing\`
+          (macOS: \`shasum -a 256 -c SHA256SUMS --ignore-missing\`).
+          EOF
+          gh release create "$TAG" --draft --verify-tag $prerelease \
+            --title "nebula-gui ${TAG#v}" --notes-file notes.md --generate-notes \
+            dist/*
