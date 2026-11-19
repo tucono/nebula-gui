@@ -9,6 +9,8 @@ A user loads a Nebula config. The app starts and stops the tunnel, shows which p
 
 > **Personal project.** Built for a private Nebula network shared with friends and family. The repo is public so they can download releases and updates. You're welcome to use it, but there's no support, and issues or pull requests may go unanswered.
 
+> **Not an official Nebula project.** nebula-gui is an independent project. It is not affiliated with or endorsed by Slack or Defined Networking. Nebula is copyright Slack Technologies, Inc. and is MIT licensed. The installers include the licenses of Nebula and every other open-source part built in, in `THIRD_PARTY_NOTICES.txt`; the app opens it from Help → About nebula-gui.
+
 > **Status:** pre-alpha. The service embeds Nebula, and the GUI can import a config, connect and disconnect, show the service log, explain problems in plain language, and make a masked troubleshooting report (M2). It also lists peers under names the user chooses, pings them to open a tunnel, and closes stuck connections (M3). Installers and the tray (M4) aren't done yet, so for now the service is started by hand. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Goals

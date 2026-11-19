@@ -18,7 +18,7 @@ NFPM            ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.49.0
 ISCC            ?= C:/Program Files (x86)/Inno Setup 6/ISCC.exe
 WINRES          ?= go run github.com/tc-hib/go-winres@v0.3.3
 
-.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons package-linux package-macos package-windows
+.PHONY: build service gui-bin dev-service gui test lint fmt tidy clean lab-up lab-down lab-import icons notices package-linux package-macos package-windows
 
 ## build: build both binaries into bin/
 build:
@@ -58,15 +58,19 @@ lab-import:
 icons:
 	go run ./packaging/icons -src internal/gui/assets -out dist/icons
 
+## notices: write dist/THIRD_PARTY_NOTICES.txt, the licenses of what's built in (for this GOOS)
+notices:
+	go run ./packaging/notices -out dist/THIRD_PARTY_NOTICES.txt
+
 ## package-linux: build the .deb and .rpm into dist/ (amd64; run on Linux)
-package-linux: icons
+package-linux: icons notices
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/linux/nebula-guid ./cmd/nebula-guid
 	go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/linux/nebula-gui ./cmd/nebula-gui
 	PKG_VERSION="$(PKG_VERSION)" $(NFPM) package --config packaging/linux/nfpm.yaml --packager deb --target dist/
 	PKG_VERSION="$(PKG_VERSION)" $(NFPM) package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
 
 ## package-macos: build the universal .pkg into dist/ (run on a Mac with the Xcode command line tools)
-package-macos: icons
+package-macos: icons notices
 	for arch in amd64 arm64; do \
 		CGO_ENABLED=0 GOARCH=$$arch go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/macos/$$arch/nebula-guid ./cmd/nebula-guid && \
 		CGO_ENABLED=1 GOARCH=$$arch MACOSX_DEPLOYMENT_TARGET=11.0 go build -trimpath -ldflags "$(RELEASE_LDFLAGS)" -o dist/macos/$$arch/nebula-gui ./cmd/nebula-gui || exit 1; \
@@ -74,7 +78,7 @@ package-macos: icons
 	packaging/macos/build-pkg.sh "$(RELEASE_VERSION)"
 
 ## package-windows: build the setup .exe into dist/ (amd64; run on Windows with Inno Setup 6, from bash)
-package-windows: icons
+package-windows: icons notices
 	powershell -NoProfile -ExecutionPolicy Bypass -File packaging/windows/fetch-wintun.ps1 -OutDir dist/windows
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(WIN_LDFLAGS)" -o dist/windows/nebula-guid.exe ./cmd/nebula-guid
 	go build -trimpath -ldflags "$(WIN_LDFLAGS) -H=windowsgui" -o dist/windows/nebula-gui.exe ./cmd/nebula-gui

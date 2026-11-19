@@ -45,10 +45,11 @@ function statusOverPipe {
 
 switch ($State) {
     'Installed' {
-        foreach ($f in 'nebula-gui.exe', 'nebula-guid.exe', 'nebula-gui.ico',
+        foreach ($f in 'nebula-gui.exe', 'nebula-guid.exe', 'nebula-gui.ico', 'THIRD_PARTY_NOTICES.txt',
             'dist\windows\wintun\bin\amd64\wintun.dll', 'dist\windows\wintun\LICENSE.txt') {
             Check (Test-Path (Join-Path $app $f)) "$f installed"
         }
+        Check ([bool](Select-String -Path (Join-Path $app 'THIRD_PARTY_NOTICES.txt') -Pattern '^github\.com/slackhq/nebula ' -Quiet)) 'notices list Nebula'
         $ver = & (Join-Path $app 'nebula-guid.exe') --version
         Check ($LASTEXITCODE -eq 0 -and $ver) "nebula-guid --version: $ver"
         # The version details from packaging/windows/*.winres.json.

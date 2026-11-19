@@ -6,9 +6,9 @@
 #
 #   packaging/macos/build-pkg.sh <version>
 #
-# It expects dist/macos/{amd64,arm64}/{nebula-gui,nebula-guid} and
-# dist/icons/nebula-gui.icns, joins each pair into a universal binary,
-# makes the app bundle, and writes
+# It expects dist/macos/{amd64,arm64}/{nebula-gui,nebula-guid},
+# dist/icons/nebula-gui.icns and dist/THIRD_PARTY_NOTICES.txt, joins
+# each pair into a universal binary, makes the app bundle, and writes
 # dist/nebula-gui-<version>-macos-universal.pkg. Run it from the
 # repository's top directory, on a Mac.
 
@@ -31,6 +31,7 @@ lipo -create -output "$app/Contents/MacOS/nebula-gui" dist/macos/amd64/nebula-gu
 lipo -create -output "$libexec/nebula-guid" dist/macos/amd64/nebula-guid dist/macos/arm64/nebula-guid
 cp "$here/uninstall.sh" "$libexec/uninstall.sh"
 cp dist/icons/nebula-gui.icns "$app/Contents/Resources/nebula-gui.icns"
+cp dist/THIRD_PARTY_NOTICES.txt "$app/Contents/Resources/THIRD_PARTY_NOTICES.txt"
 sed -e "s/@NUMVERSION@/$numversion/g" -e "s/@VERSION@/$version/g" "$here/Info.plist" >"$app/Contents/Info.plist"
 printf 'APPL????' >"$app/Contents/PkgInfo"
 cp "$here/io.github.tucono.nebula-guid.plist" "$root/Library/LaunchDaemons/"
@@ -38,6 +39,7 @@ plutil -lint "$app/Contents/Info.plist" "$root/Library/LaunchDaemons/io.github.t
 
 chmod 755 "$app/Contents/MacOS/nebula-gui" "$libexec/nebula-guid" "$libexec/uninstall.sh"
 chmod 644 "$app/Contents/Info.plist" "$app/Contents/PkgInfo" "$app/Contents/Resources/nebula-gui.icns" \
+	"$app/Contents/Resources/THIRD_PARTY_NOTICES.txt" \
 	"$root/Library/LaunchDaemons/io.github.tucono.nebula-guid.plist"
 
 # Ad hoc signatures: Apple silicon runs only signed code, and a signed

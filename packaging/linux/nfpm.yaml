@@ -19,6 +19,8 @@ description: |-
   Desktop app for joining a Nebula overlay network.
   A background service runs Nebula; the app imports the config you were
   given, connects and disconnects, and shows the network's state.
+  An independent project, not affiliated with or endorsed by Slack or
+  Defined Networking.
 
 overrides:
   deb:
@@ -56,6 +58,9 @@ contents:
     file_info: { mode: 0755 }
   - src: packaging/linux/nebula-guid.service
     dst: /usr/lib/systemd/system/nebula-guid.service
+    file_info: { mode: 0644 }
+  - src: dist/THIRD_PARTY_NOTICES.txt
+    dst: /usr/share/doc/nebula-gui/THIRD_PARTY_NOTICES.txt
     file_info: { mode: 0644 }
   - src: packaging/linux/sysusers.conf
     dst: /usr/lib/sysusers.d/nebula-gui.conf

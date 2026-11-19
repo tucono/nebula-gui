@@ -67,6 +67,7 @@ installed)
 	check "service installed" test -x "$libexec/nebula-guid"
 	check "service is universal" universal "$libexec/nebula-guid"
 	check "uninstall script installed" test -x "$libexec/uninstall.sh"
+	check "third-party notices" grep -q '^github.com/slackhq/nebula ' "$app/Contents/Resources/THIRD_PARTY_NOTICES.txt"
 	echo "      version: $("$libexec/nebula-guid" --version)"
 	check "launch daemon" mode_owner "$plist" "644 root:wheel"
 	check "package receipt" pkgutil --pkg-info io.github.tucono.nebula-gui

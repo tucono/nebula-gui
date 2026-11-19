@@ -52,6 +52,7 @@ RestartApplications=no
 Source: "{#Dist}\windows\nebula-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\windows\nebula-guid.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\icons\nebula-gui.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Dist}\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; Nebula looks for the DLL at this path under nebula-guid.exe's directory.
 Source: "{#Dist}\windows\wintun\bin\amd64\wintun.dll"; DestDir: "{app}\dist\windows\wintun\bin\amd64"; Flags: ignoreversion
 Source: "{#Dist}\windows\wintun\LICENSE.txt"; DestDir: "{app}\dist\windows\wintun"; Flags: ignoreversion

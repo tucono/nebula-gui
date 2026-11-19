@@ -36,6 +36,8 @@ mode_owner /usr/lib/sysusers.d/nebula-gui.conf 644 root:root
 mode_owner /usr/share/applications/io.github.tucono.nebulagui.desktop 644 root:root
 mode_owner /usr/share/icons/hicolor/256x256/apps/io.github.tucono.nebulagui.png 644 root:root
 mode_owner /usr/share/icons/hicolor/scalable/apps/io.github.tucono.nebulagui.svg 644 root:root
+mode_owner /usr/share/doc/nebula-gui/THIRD_PARTY_NOTICES.txt 644 root:root
+grep -q '^github.com/slackhq/nebula ' /usr/share/doc/nebula-gui/THIRD_PARTY_NOTICES.txt || fail "notices don't list Nebula"
 
 getent group nebula-gui >/dev/null || fail "no nebula-gui group"
 if entry=$(getent passwd nebula-guid); then

@@ -225,14 +225,17 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 }
 
 // mainMenu is File → Quit and Help → Get help…, for when something feels
-// wrong without a problem being shown. Quit is set explicitly: Fyne adds
+// wrong without a problem being shown, and About nebula-gui. Quit is set explicitly: Fyne adds
 // one to the first menu otherwise, which would put it under Help.
 func (m *mainWindow) mainMenu() *fyne.MainMenu {
 	quit := fyne.NewMenuItem("Quit", m.quit)
 	quit.IsQuit = true
 	return fyne.NewMainMenu(
 		fyne.NewMenu("File", quit),
-		fyne.NewMenu("Help", fyne.NewMenuItem("Get help…", func() { m.openHelp(m.bannerProblem()) })),
+		fyne.NewMenu("Help",
+			fyne.NewMenuItem("Get help…", func() { m.openHelp(m.bannerProblem()) }),
+			fyne.NewMenuItem("About nebula-gui", m.openAbout),
+		),
 	)
 }
 
