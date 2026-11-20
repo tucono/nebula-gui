@@ -8,6 +8,8 @@
 #
 # Arguments: dpkg passes "configure <old version>", with no old version on
 # a fresh install; rpm passes 1 on a fresh install and 2 on an upgrade.
+# Installing again after a removal (not a purge) is fresh too, though dpkg
+# passes the old version then: preremove.sh leaves a mark for it.
 
 group=nebula-gui
 user=nebula-guid
@@ -19,6 +21,11 @@ configure) if [ -z "$2" ]; then fresh=1; else fresh=; fi ;;
 2) fresh= ;;
 *) exit 0 ;;
 esac
+removed=/var/lib/nebula-gui/.removed
+if [ -e "$removed" ]; then
+	fresh=1
+	rm -f "$removed"
+fi
 
 create_users() {
 	if command -v systemd-sysusers >/dev/null 2>&1; then
