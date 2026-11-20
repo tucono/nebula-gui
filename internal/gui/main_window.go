@@ -64,6 +64,10 @@ type mainWindow struct {
 	exit func()
 	// startSvc asks the OS to start the service. Tests replace it.
 	startSvc func(context.Context) error
+	// uninstaller is the macOS uninstaller app, or "" where there's none;
+	// runUninstaller opens it. Tests replace both.
+	uninstaller    string
+	runUninstaller func(string) error
 	// starting is set while it does.
 	starting bool
 
@@ -128,20 +132,22 @@ type mainWindow struct {
 
 func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *mainWindow {
 	m := &mainWindow{
-		a:          a,
-		w:          a.NewWindow("Nebula"),
-		c:          c,
-		log:        log,
-		gate:       &statusGate{},
-		names:      openNameStore(""),
-		saved:      openPeerStore(""),
-		appVersion: appVersion,
-		spawn:      func(f func()) { go f() },
-		readFile:   readCapped,
-		exit:       a.Quit,
-		startSvc:   startService,
-		nativeOpen: platformOpen,
-		in:         statusInput{GOOS: runtime.GOOS},
+		a:              a,
+		w:              a.NewWindow("Nebula"),
+		c:              c,
+		log:            log,
+		gate:           &statusGate{},
+		names:          openNameStore(""),
+		saved:          openPeerStore(""),
+		appVersion:     appVersion,
+		spawn:          func(f func()) { go f() },
+		readFile:       readCapped,
+		exit:           a.Quit,
+		startSvc:       startService,
+		nativeOpen:     platformOpen,
+		uninstaller:    findUninstaller(),
+		runUninstaller: runUninstaller,
+		in:             statusInput{GOOS: runtime.GOOS},
 	}
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.poller = newPoller(c, log, m.gate)
@@ -225,17 +231,22 @@ func newMainWindow(a fyne.App, c actionClient, log *appLog, appVersion string) *
 }
 
 // mainMenu is File → Quit and Help → Get help…, for when something feels
-// wrong without a problem being shown, and About nebula-gui. Quit is set explicitly: Fyne adds
-// one to the first menu otherwise, which would put it under Help.
+// wrong without a problem being shown, and About nebula-gui, then on
+// macOS Uninstall nebula-gui…. Quit is set explicitly: Fyne adds one to
+// the first menu otherwise, which would put it under Help.
 func (m *mainWindow) mainMenu() *fyne.MainMenu {
 	quit := fyne.NewMenuItem("Quit", m.quit)
 	quit.IsQuit = true
+	help := []*fyne.MenuItem{
+		fyne.NewMenuItem("Get help…", func() { m.openHelp(m.bannerProblem()) }),
+		fyne.NewMenuItem("About nebula-gui", m.openAbout),
+	}
+	if u := m.uninstallItem(); u != nil {
+		help = append(help, fyne.NewMenuItemSeparator(), u)
+	}
 	return fyne.NewMainMenu(
 		fyne.NewMenu("File", quit),
-		fyne.NewMenu("Help",
-			fyne.NewMenuItem("Get help…", func() { m.openHelp(m.bannerProblem()) }),
-			fyne.NewMenuItem("About nebula-gui", m.openAbout),
-		),
+		fyne.NewMenu("Help", help...),
 	)
 }
 
