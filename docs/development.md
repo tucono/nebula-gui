@@ -48,7 +48,7 @@ packaging/
   icons/             # renders internal/gui/assets/app.svg to PNG, ICO and ICNS (make icons)
   notices/           # writes THIRD_PARTY_NOTICES.txt from the modules built in (make notices)
   linux/             # nfpm config, systemd unit, sysusers file, .desktop file, package scripts, install check
-  macos/             # build-pkg.sh, Info.plist, launchd plist, Distribution.xml, scripts, uninstall.sh, install check
+  macos/             # build-pkg.sh, Info.plist, launchd plist, Distribution.xml, scripts, uninstall.sh and .applescript, checks
   windows/           # Inno Setup script, Wintun hash and fetch script, version resources, install check
 tools/netadmin/      # config templates and make-config.sh for whoever runs the network
 docs/
@@ -161,7 +161,7 @@ All three run `make icons` and `make notices` first. Release builds are stripped
 CI builds every package on each push and checks it:
 
 - **Linux** (`ubuntu-22.04`, the oldest runner, so the GUI's glibc requirement stays low): `shellcheck` on the package scripts, then installs the `.deb`, runs `packaging/linux/check-install.sh --running` (files, modes, user, group, `systemd-analyze verify` on the unit, the service running and answering), removes it and checks the service is gone and `/var/lib/nebula-gui` is kept. The `.rpm` is installed and checked in a `fedora:latest` container, without systemd.
-- **macOS:** installs the `.pkg` with `installer` and runs `packaging/macos/check-install.sh` (files, universal binaries, signatures, the daemon, the socket's owner and mode, the API as root and as the console user, refused to `nobody`), then uninstalls twice: keeping the settings, then with `--remove-settings`.
+- **macOS:** installs the `.pkg` with `installer` and runs `packaging/macos/check-install.sh` (files, universal binaries, signatures, the daemon, the socket's owner and mode, the API as root and as the console user, refused to `nobody`), then uninstalls twice: `removed`, keeping the settings, then `purged`, with `--remove-everything`. Before each uninstall `check-uninstall.sh seed` puts the app's folders and LaunchAgent, and another app's beside them, in the runner's home and in a second home folder in `/Users` with no account behind it; after it, `kept` checks only the LaunchAgents went, and `gone` that everything of ours did and nothing of the other app's. `check-install.sh` also checks the Uninstall nebula-gui app: installed with the app's icon and signed, then removed.
 - **Windows:** installs the setup silently and runs `packaging/windows/check-install.ps1 -State Installed` (files, version details, the service, group, firewall rule, the API over the pipe), then uninstalls twice: `-State Removed`, then `/REMOVESETTINGS` and `-State Purged`. Before each uninstall `check-uninstall.ps1 -State Seed` gives the runner's user the app's folders and start-at-sign-in values, and another app's beside them; after it, `-State Kept` checks only the values went, and `-State Gone` that everything of ours did and nothing of the other app's. A step before the build runs the test that loads a user's registry hive from `NTUSER.DAT`, and fails if it skipped.
 
 What CI can't check (warnings when downloading, the tray, the group taking effect, autoconnect at boot) is in the smoke tests in [testing.md](testing.md#installer-smoke-tests-m4).

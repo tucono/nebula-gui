@@ -7,11 +7,14 @@
 #
 #   check-install.sh installed   the service runs and answers
 #   check-install.sh removed     uninstalled; settings and group kept
-#   check-install.sh purged      uninstalled with --remove-settings
+#   check-install.sh purged      uninstalled with --remove-everything
+#
+# check-uninstall.sh checks each user's own files.
 
 label=io.github.tucono.nebula-guid
 plist=/Library/LaunchDaemons/$label.plist
 app=/Applications/nebula-gui.app
+uninstaller="/Applications/Uninstall nebula-gui.app"
 libexec=/usr/local/libexec/nebula-gui
 sock=/var/run/nebula-guid.sock
 state="/Library/Application Support/nebula-gui"
@@ -67,6 +70,9 @@ installed)
 	check "service installed" test -x "$libexec/nebula-guid"
 	check "service is universal" universal "$libexec/nebula-guid"
 	check "uninstall script installed" test -x "$libexec/uninstall.sh"
+	check "uninstaller app installed" test -x "$uninstaller/Contents/MacOS/applet"
+	check "uninstaller app signature" codesign --verify "$uninstaller"
+	check "uninstaller app has the icon" cmp -s "$uninstaller/Contents/Resources/applet.icns" "$app/Contents/Resources/nebula-gui.icns"
 	check "third-party notices" grep -q '^github.com/slackhq/nebula ' "$app/Contents/Resources/THIRD_PARTY_NOTICES.txt"
 	echo "      version: $("$libexec/nebula-guid" --version)"
 	check "launch daemon" mode_owner "$plist" "644 root:wheel"
@@ -100,6 +106,7 @@ removed | purged)
 	check "nebula-guid not running" not_running
 	check "launch daemon removed" missing "$plist"
 	check "app removed" missing "$app"
+	check "uninstaller app removed" missing "$uninstaller"
 	check "service files removed" missing "$libexec"
 	check "socket removed" missing "$sock"
 	check "package receipt removed" no_receipt

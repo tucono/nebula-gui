@@ -9,8 +9,9 @@
 # It expects dist/macos/{amd64,arm64}/{nebula-gui,nebula-guid},
 # dist/icons/nebula-gui.icns and dist/THIRD_PARTY_NOTICES.txt, joins
 # each pair into a universal binary, makes the app bundle, and writes
-# dist/nebula-gui-<version>-macos-universal.pkg. Run it from the
-# repository's top directory, on a Mac.
+# dist/nebula-gui-<version>-macos-universal.pkg. The package also holds
+# Uninstall nebula-gui.app, compiled from uninstall.applescript. Run it
+# from the repository's top directory, on a Mac.
 
 set -eu
 
@@ -21,6 +22,7 @@ here=packaging/macos
 work=dist/macos/pkg
 root=$work/root
 app=$root/Applications/nebula-gui.app
+uninstaller="$root/Applications/Uninstall nebula-gui.app"
 libexec=$root/usr/local/libexec/nebula-gui
 out=dist/nebula-gui-$version-macos-universal.pkg
 
@@ -37,6 +39,14 @@ printf 'APPL????' >"$app/Contents/PkgInfo"
 cp "$here/io.github.tucono.nebula-guid.plist" "$root/Library/LaunchDaemons/"
 plutil -lint "$app/Contents/Info.plist" "$root/Library/LaunchDaemons/io.github.tucono.nebula-guid.plist"
 
+# The uninstaller: an AppleScript app with the app's icon and its own ID.
+osacompile -o "$uninstaller" "$here/uninstall.applescript"
+cp dist/icons/nebula-gui.icns "$uninstaller/Contents/Resources/applet.icns"
+rm -f "$uninstaller/Contents/Resources/Assets.car"
+plutil -replace CFBundleIdentifier -string io.github.tucono.nebulagui.uninstall "$uninstaller/Contents/Info.plist"
+plutil -replace CFBundleShortVersionString -string "$numversion" "$uninstaller/Contents/Info.plist"
+plutil -remove CFBundleIconName "$uninstaller/Contents/Info.plist" 2>/dev/null || true
+
 chmod 755 "$app/Contents/MacOS/nebula-gui" "$libexec/nebula-guid" "$libexec/uninstall.sh"
 chmod 644 "$app/Contents/Info.plist" "$app/Contents/PkgInfo" "$app/Contents/Resources/nebula-gui.icns" \
 	"$app/Contents/Resources/THIRD_PARTY_NOTICES.txt" \
@@ -46,13 +56,18 @@ chmod 644 "$app/Contents/Info.plist" "$app/Contents/PkgInfo" "$app/Contents/Reso
 # bundle keeps its resources sealed. Neither is a Developer ID (M5).
 codesign --force --sign - "$libexec/nebula-guid"
 codesign --force --sign - "$app"
+codesign --force --sign - "$uninstaller"
 
-# The installer would otherwise look for the app wherever a bundle with
+# The installer would otherwise look for each app wherever a bundle with
 # its identifier is (a development build, say) and update that instead,
 # and would skip it if the one there looked newer.
 pkgbuild --analyze --root "$root" "$work/component.plist"
-plutil -replace 0.BundleIsRelocatable -bool NO "$work/component.plist"
-plutil -replace 0.BundleIsVersionChecked -bool NO "$work/component.plist"
+i=0
+while plutil -extract "$i" xml1 -o /dev/null "$work/component.plist" 2>/dev/null; do
+	plutil -replace "$i.BundleIsRelocatable" -bool NO "$work/component.plist"
+	plutil -replace "$i.BundleIsVersionChecked" -bool NO "$work/component.plist"
+	i=$((i + 1))
+done
 
 pkgbuild --root "$root" \
 	--component-plist "$work/component.plist" \

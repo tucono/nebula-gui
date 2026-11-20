@@ -125,17 +125,23 @@ jobs:
           sudo installer -verbose -pkg dist/nebula-gui-*-macos-universal.pkg -target /
           sudo packaging/macos/check-install.sh installed
 
+      # Each user's files: the runner's, and a second home folder in
+      # /Users, which is where remove-user-files looks.
       - name: Uninstall, keeping the settings, and check
         run: |
+          sudo packaging/macos/check-uninstall.sh seed
           sudo /usr/local/libexec/nebula-gui/uninstall.sh
           sudo packaging/macos/check-install.sh removed
+          sudo packaging/macos/check-uninstall.sh kept
 
-      - name: Reinstall, uninstall with --remove-settings, and check
+      - name: Reinstall, uninstall with --remove-everything, and check
         run: |
           sudo installer -pkg dist/nebula-gui-*-macos-universal.pkg -target /
           sudo packaging/macos/check-install.sh installed
-          sudo /usr/local/libexec/nebula-gui/uninstall.sh --remove-settings
+          sudo packaging/macos/check-uninstall.sh seed
+          sudo /usr/local/libexec/nebula-gui/uninstall.sh --remove-everything
           sudo packaging/macos/check-install.sh purged
+          sudo packaging/macos/check-uninstall.sh gone
 
       - name: Show the logs
         if: always()
