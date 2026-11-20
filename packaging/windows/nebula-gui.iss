@@ -12,7 +12,8 @@
 ; registration, so it never grants access as a side effect.
 ;
 ; Silent use: setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART; unins000.exe
-; the same, plus /REMOVESETTINGS to remove the settings as well.
+; the same, plus /REMOVESETTINGS to remove everything nebula-gui saved,
+; every user's files included.
 
 #ifndef AppVersion
   #error Build with make package-windows, which defines AppVersion and NumVersion.
@@ -180,16 +181,24 @@ begin
     usUninstall:
       begin
         RemoveSettings := HasParam('/REMOVESETTINGS') or
-          (SuppressibleMsgBox('Also remove your Nebula settings?' + #13#10#13#10 +
-            'This deletes the imported config and the service''s logs, and the ' +
-            'nebula-gui group. Keep them to pick up where you left off if you ' +
-            'install nebula-gui again.',
+          (SuppressibleMsgBox('Remove everything nebula-gui saved on this computer?' + #13#10#13#10 +
+            'This deletes the imported config, the service''s logs and the ' +
+            'nebula-gui group, and every user''s saved peer names, app log and ' +
+            'settings. Choose No to keep them for a reinstall.',
             mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES);
+        // The app, in every session, so its files can be removed and it
+        // can't write them again.
+        RunHidden(Sys('taskkill.exe'), '/f /im nebula-gui.exe');
+        // Every user's start-at-sign-in entry, which would otherwise point
+        // at a missing program; and their files too if the answer was Yes.
+        // A failure is in the setup log and doesn't stop the uninstall.
+        if RemoveSettings then
+          RunHidden(ExpandConstant('{app}\nebula-guid.exe'), 'remove-user-files')
+        else
+          RunHidden(ExpandConstant('{app}\nebula-guid.exe'), 'remove-user-files --autostart-only');
         // Stops Nebula and removes the service before its files go.
         RunHidden(ExpandConstant('{app}\nebula-guid.exe'), 'uninstall');
         RunHidden(Sys('netsh.exe'), 'advfirewall firewall delete rule name="' + FirewallRule + '"');
-        // The app, in every session, so its files can be removed.
-        RunHidden(Sys('taskkill.exe'), '/f /im nebula-gui.exe');
       end;
     usPostUninstall:
       if RemoveSettings then

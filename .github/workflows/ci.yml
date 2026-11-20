@@ -173,6 +173,11 @@ jobs:
             choco install innosetup --no-progress -y
           fi
 
+      - name: Load a user's registry hive (needs the administrator runner)
+        run: |
+          go test -v -count=1 -run 'TestRemoveAutostartValuesFromHiveFile' ./internal/userfiles | tee hive.log
+          ! grep -q -- '--- SKIP' hive.log
+
       - name: Build the installer
         run: make package-windows
 
@@ -181,29 +186,33 @@ jobs:
         run: |
           $setup = (Get-Item dist\nebula-gui-*-windows-amd64-setup.exe).FullName
           Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\install.log"
-          packaging\windows\check-install.ps1 -State Installed
+          packaging\windows\check-install.ps1 -State Installed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Uninstall, keeping the settings, and check
         shell: pwsh
         run: |
+          packaging\windows\check-uninstall.ps1 -State Seed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $unins = Join-Path $env:ProgramFiles 'nebula-gui\unins000.exe'
           Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\uninstall.log"
           # The uninstaller hands over to a copy of itself and returns early.
           for ($i = 0; $i -lt 120 -and (Test-Path $unins); $i++) { Start-Sleep 1 }
           Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(_iu|unins|nebula|net|sc|taskkill|netsh)' } | Format-Table ProcessId, ParentProcessId, Name, CommandLine -AutoSize -Wrap
-          packaging\windows\check-install.ps1 -State Removed
+          packaging\windows\check-install.ps1 -State Removed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          packaging\windows\check-uninstall.ps1 -State Kept; if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Reinstall, uninstall with /REMOVESETTINGS, and check
         shell: pwsh
         run: |
           $setup = (Get-Item dist\nebula-gui-*-windows-amd64-setup.exe).FullName
           Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\reinstall.log"
-          packaging\windows\check-install.ps1 -State Installed
+          packaging\windows\check-install.ps1 -State Installed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          packaging\windows\check-uninstall.ps1 -State Seed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $unins = Join-Path $env:ProgramFiles 'nebula-gui\unins000.exe'
           Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/REMOVESETTINGS', "/LOG=$PWD\dist\purge.log"
           for ($i = 0; $i -lt 120 -and (Test-Path $unins); $i++) { Start-Sleep 1 }
           Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(_iu|unins|nebula|net|sc|taskkill|netsh)' } | Format-Table ProcessId, ParentProcessId, Name, CommandLine -AutoSize -Wrap
-          packaging\windows\check-install.ps1 -State Purged
+          packaging\windows\check-install.ps1 -State Purged; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          packaging\windows\check-uninstall.ps1 -State Gone; if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Show the setup logs
         if: always()
