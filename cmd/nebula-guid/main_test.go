@@ -25,6 +25,7 @@ func TestSplitCommand(t *testing.T) {
 		{[]string{"install", "--allow-user", "alice"}, "install", []string{"--allow-user", "alice"}},
 		{[]string{"uninstall"}, "uninstall", []string{}},
 		{[]string{"run", "--socket-group", "nebula-gui"}, "run", []string{"--socket-group", "nebula-gui"}},
+		{[]string{"remove-user-files", "--autostart-only"}, "remove-user-files", []string{"--autostart-only"}},
 	}
 	for _, tc := range tests {
 		cmd, rest, err := splitCommand(tc.args)

@@ -71,13 +71,24 @@ type Files struct {
 // folder elsewhere (XDG_CONFIG_HOME on Linux) has their files there
 // instead, which can't be seen from outside their session.
 func For(goos, home string) Files {
-	j := func(elem ...string) string { return join(goos, append([]string{home}, elem...)...) }
+	f := relFor(goos)
+	for i, d := range f.Dirs {
+		f.Dirs[i] = join(goos, home, d)
+	}
+	if f.Autostart != "" {
+		f.Autostart = join(goos, home, f.Autostart)
+	}
+	return f
+}
+
+// relFor gives a user's files on goos relative to their home folder.
+func relFor(goos string) Files {
+	j := func(elem ...string) string { return join(goos, elem...) }
 	switch goos {
 	case "windows":
-		roaming := j("AppData", "Roaming")
 		return Files{Dirs: []string{
-			join(goos, roaming, DirName),
-			join(goos, roaming, "fyne", AppID),
+			j("AppData", "Roaming", DirName),
+			j("AppData", "Roaming", "fyne", AppID),
 		}}
 	case "darwin":
 		return Files{

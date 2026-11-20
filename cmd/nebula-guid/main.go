@@ -7,7 +7,8 @@
 // With no command it runs in the foreground: that's how systemd and launchd
 // run it, and how it runs during development. On Windows the commands
 // install, uninstall and run register it with the Service Control Manager
-// and run under it.
+// and run under it. On every system, remove-user-files removes each user's
+// nebula-gui files for the uninstallers.
 package main
 
 import (
@@ -54,6 +55,8 @@ func run(args []string) error {
 		return uninstallService(rest)
 	case "run":
 		return runService(rest)
+	case "remove-user-files":
+		return removeUserFiles(rest)
 	default:
 		return foreground(rest)
 	}
@@ -66,10 +69,10 @@ func splitCommand(args []string) (cmd string, rest []string, err error) {
 		return "", args, nil
 	}
 	switch args[0] {
-	case "install", "uninstall", "run":
+	case "install", "uninstall", "run", "remove-user-files":
 		return args[0], args[1:], nil
 	}
-	return "", nil, fmt.Errorf("unknown command %q (commands: install, uninstall, run)", args[0])
+	return "", nil, fmt.Errorf("unknown command %q (commands: install, uninstall, run, remove-user-files)", args[0])
 }
 
 // options are the flags for running the service, in the foreground or
