@@ -48,6 +48,8 @@ Detailed plan: [m4-plan.md](m4-plan.md).
 - [x] Third-party license notices in every package, and an About dialog
 
 ## M4.5: Full uninstall
+Detailed plan: [m4.5-plan.md](m4.5-plan.md).
+
 - [ ] An option to remove everything: the service's state (imported config, logs, settings) and each user's own files (saved peer names, masking names, the app log, app preferences, the start-at-sign-in entry). Today every uninstaller leaves users' files behind, and on Linux even a purge keeps `/var/lib/nebula-gui`.
 - [ ] macOS: a cleaner uninstall than a Terminal script, if the platform allows one
 - [ ] Tests: what each uninstall removes and keeps, on all three platforms
