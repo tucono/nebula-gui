@@ -6,6 +6,7 @@
 package gui
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 )
@@ -22,8 +23,11 @@ func findUninstaller() string {
 	return darwinUninstaller
 }
 
-// runUninstaller opens the uninstaller app. open returns once it has
-// started.
+// runUninstaller opens the uninstaller app, which can only be the one
+// findUninstaller found. open returns once it has started.
 func runUninstaller(app string) error {
-	return exec.Command("open", "-a", app).Run()
+	if app != darwinUninstaller {
+		return fmt.Errorf("no uninstaller at %s", app)
+	}
+	return exec.Command("open", "-a", darwinUninstaller).Run()
 }
