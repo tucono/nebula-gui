@@ -23,7 +23,7 @@ func fromTransportError(err error, pc problemContext) *problem {
 	case errnoIn(err, permissionErrnos) && pc.Setup.GroupPending:
 		return restartNeeded()
 	case errnoIn(err, permissionErrnos):
-		return noPermission(pc.GOOS)
+		return noPermission(pc.GOOS, pc.Account)
 	case errnoIn(err, notRunningErrnos),
 		errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		// A connection that breaks mid-request means the service stopped.

@@ -6,6 +6,7 @@ package gui
 import (
 	"errors"
 	"fmt"
+	"os/user"
 	"runtime"
 	"strings"
 	"time"
@@ -193,42 +194,75 @@ func restartNeeded() *problem {
 }
 
 // noPermission takes the OS so tests can check every platform's wording.
-func noPermission(goos string) *problem {
+// account is the signed-in user's name (on Windows with its domain or
+// computer prefix, as user.Current gives it), written into the command so
+// it adds the right person whoever runs it: an administrator copying the
+// command into their own prompt would otherwise add themselves through
+// %USERNAME% or $USER. Empty when the name couldn't be found, which falls
+// back to those variables.
+func noPermission(goos, account string) *problem {
 	p := &problem{
 		ID:      probNoPermission,
 		Title:   "You don't have permission to use Nebula on this computer",
-		Explain: "Only some user accounts on this computer are allowed to control the Nebula connection, and yours isn't one of them yet.",
+		Explain: "Your user account needs to be added to the nebula-gui group before it can control the Nebula connection.",
 		Fix:     &fixAction{Label: "Try again", Kind: fixRetry},
 	}
 	switch goos {
 	case "windows":
 		// The installer grants only the person who installed it; anyone
 		// else is added to the group, which takes effect at the next
-		// sign-in. %USERNAME% is right only in the user's own elevated
-		// prompt: one opened with someone else's password runs as them.
-		p.Explain = "Your user account needs to be added to the nebula-gui group before it can control the Nebula connection."
-		p.Steps = []string{
-			"Ask someone with an administrator account on this computer to add you to the nebula-gui group. If your own account is an administrator, open Command Prompt with Run as administrator and run the command below.",
-			"Sign out of Windows and back in.",
-		}
-		p.Command = `net localgroup nebula-gui "%USERNAME%" /add`
-	default:
-		p.Explain = "Your user account needs to be added to the nebula-gui group before it can control the Nebula connection."
-		if goos == "darwin" {
+		// sign-in.
+		if account != "" {
 			p.Steps = []string{
-				"Ask whoever manages this computer to add you, or run the command below.",
-				"Log out and back in.",
+				"Ask someone with an administrator account on this computer to open Command Prompt with Run as administrator and run the command below. If your own account is an administrator, you can do it yourself.",
+				"Sign out of Windows and back in.",
 			}
-			p.Command = `sudo dseditgroup -o edit -a "$USER" -t user nebula-gui`
+			p.Command = `net localgroup nebula-gui "` + account + `" /add`
 		} else {
+			// %USERNAME% is right only in the user's own elevated prompt:
+			// one opened with someone else's password runs as them.
 			p.Steps = []string{
-				"Ask whoever manages this computer to add you, or run the command below.",
-				"Restart your computer.",
+				"Ask someone with an administrator account on this computer to add you to the nebula-gui group. If your own account is an administrator, open Command Prompt with Run as administrator and run the command below.",
+				"Sign out of Windows and back in.",
 			}
-			p.Command = `sudo usermod -aG nebula-gui "$USER"`
+			p.Command = `net localgroup nebula-gui "%USERNAME%" /add`
 		}
+	case "darwin":
+		p.Steps = []string{
+			"Ask whoever manages this computer to add you, or run the command below.",
+			"Log out and back in.",
+		}
+		p.Command = `sudo dseditgroup -o edit -a ` + shellAccount(account) + ` -t user nebula-gui`
+	default:
+		p.Steps = []string{
+			"Ask whoever manages this computer to add you, or run the command below.",
+			"Restart your computer.",
+		}
+		p.Command = `sudo usermod -aG nebula-gui ` + shellAccount(account)
 	}
 	return p
+}
+
+// shellAccount is account quoted for a POSIX shell when it needs it, or
+// "$USER" when it's unknown.
+func shellAccount(account string) string {
+	if account == "" {
+		return `"$USER"`
+	}
+	if strings.Trim(account, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") == "" {
+		return account
+	}
+	return "'" + strings.ReplaceAll(account, "'", `'\''`) + "'"
+}
+
+// currentAccount is the signed-in user's name for noPermission's command,
+// or empty if it can't be found.
+func currentAccount() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	return u.Username
 }
 
 func serviceNotResponding() *problem {
@@ -554,6 +588,9 @@ type problemContext struct {
 	// shown when it can't be reached.
 	Setup serviceSetup
 	GOOS  string
+	// Account is the user name for the no-permission command; problemFor
+	// fills it in.
+	Account string
 }
 
 // problemFor turns any error from an api.Client call into a catalogue
@@ -565,6 +602,9 @@ func problemFor(err error, pc problemContext) *problem {
 	}
 	if pc.GOOS == "" {
 		pc.GOOS = runtime.GOOS
+	}
+	if pc.Account == "" {
+		pc.Account = currentAccount()
 	}
 	var p *problem
 	var ae *api.Error

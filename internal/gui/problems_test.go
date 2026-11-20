@@ -24,7 +24,7 @@ func catalogue() []*problem {
 	day := time.Date(2027, 3, 3, 12, 0, 0, 0, time.Local)
 	var out []*problem
 	for _, goos := range []string{"linux", "darwin", "windows"} {
-		out = append(out, noPermission(goos), tunUnavailable(goos), startFailed(goos, "exit status 1"))
+		out = append(out, noPermission(goos, "alice"), noPermission(goos, ""), tunUnavailable(goos), startFailed(goos, "exit status 1"))
 		for _, s := range setups {
 			out = append(out, serviceNotRunning(goos, s))
 		}
@@ -154,25 +154,40 @@ func TestCatalogueNames(t *testing.T) {
 			}
 		}
 	}
-	if p := noPermission("linux"); !strings.Contains(p.Command, "usermod") {
+	if p := noPermission("linux", "alice"); !strings.Contains(p.Command, "usermod") {
 		t.Errorf("linux command = %q", p.Command)
 	}
 	// Signing out doesn't reliably apply a new group on Linux (the systemd
 	// user manager can keep the old ones), so the advice is to restart.
-	if p := noPermission("linux"); !strings.Contains(strings.Join(p.Steps, " "), "Restart") {
+	if p := noPermission("linux", "alice"); !strings.Contains(strings.Join(p.Steps, " "), "Restart") {
 		t.Errorf("linux steps = %q", p.Steps)
 	}
 	if p := restartNeeded(); !strings.Contains(p.Title, "Restart") {
 		t.Errorf("restart needed title = %q", p.Title)
 	}
-	if p := noPermission("darwin"); !strings.Contains(p.Command, "dseditgroup") {
+	if p := noPermission("darwin", "alice"); !strings.Contains(p.Command, "dseditgroup") {
 		t.Errorf("darwin command = %q", p.Command)
 	}
 	// Reinstalling never grants access (an upgrade keeps the service's
 	// registration), so the advice is the group.
-	if p := noPermission("windows"); !strings.Contains(p.Command, "net localgroup nebula-gui") ||
+	if p := noPermission("windows", `DESKTOP-1\alice`); p.Command != `net localgroup nebula-gui "DESKTOP-1\alice" /add` ||
 		!strings.Contains(strings.Join(p.Steps, " "), "Sign out") {
 		t.Errorf("windows = %+v", p)
+	}
+	// The name is written in, so an administrator running the command in
+	// their own prompt adds the user, not themselves. Without a name, the
+	// variables are the fallback.
+	for _, tc := range []struct{ goos, account, want string }{
+		{"linux", "alice", "sudo usermod -aG nebula-gui alice"},
+		{"linux", "alice o'neil", `sudo usermod -aG nebula-gui 'alice o'\''neil'`},
+		{"linux", "", `sudo usermod -aG nebula-gui "$USER"`},
+		{"darwin", "alice", "sudo dseditgroup -o edit -a alice -t user nebula-gui"},
+		{"darwin", "", `sudo dseditgroup -o edit -a "$USER" -t user nebula-gui`},
+		{"windows", "", `net localgroup nebula-gui "%USERNAME%" /add`},
+	} {
+		if got := noPermission(tc.goos, tc.account).Command; got != tc.want {
+			t.Errorf("%s %q: command = %q, want %q", tc.goos, tc.account, got, tc.want)
+		}
 	}
 	if p := tunUnavailable("windows"); !strings.Contains(p.Explain, "Wintun") {
 		t.Errorf("windows tun = %q", p.Explain)

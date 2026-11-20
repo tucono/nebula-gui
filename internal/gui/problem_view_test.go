@@ -84,12 +84,12 @@ func TestProblemView(t *testing.T) {
 		t.Fatal("Get help… didn't pass the problem")
 	}
 
-	v.Set(noPermission("linux"))
+	v.Set(noPermission("linux", "alice"))
 	o = v.Object()
 	if button(t, o, "Choose the file…") != nil {
 		t.Fatal("old fix button left behind")
 	}
-	cmd := noPermission("linux").Command
+	cmd := noPermission("linux", "alice").Command
 	test.Tap(button(t, o, "Copy"))
 	if got := fyne.CurrentApp().Clipboard().Content(); got != cmd {
 		t.Fatalf("clipboard = %q, want %q", got, cmd)
