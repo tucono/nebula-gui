@@ -47,21 +47,23 @@ Detailed plan: [m4-plan.md](m4-plan.md).
 - [x] Release workflow: a draft GitHub release with the packages and `SHA256SUMS` from a version tag
 - [x] Third-party license notices in every package, and an About dialog
 
-## M4.5: Updates (needs M4 installers + signing)
-- [ ] Release pipeline produces `manifest.json` + `.minisig` and attaches them to GitHub releases
-- [ ] Service: scheduled and manual checks, upstream slackhq/nebula notice
-- [ ] Service: download, verify (signature, hash, no downgrade, platform signature), run the installer (Windows: the setup `.exe` silently; macOS: `installer`)
-- [ ] Resume the connection after an update (`resume-after-update` marker)
-- [ ] Linux: notify only, whatever the source; hand the verified package to the desktop's software installer (ADR-007)
-- [ ] GUI: Updates settings, banner and tray notification, install now or when disconnected, skip version
-- [ ] Tests: manifest signing and verification, downgrade refusal, a fake feed server in the test lab
+## M4.5: Full uninstall
+- [ ] An option to remove everything: the service's state (imported config, logs, settings) and each user's own files (saved peer names, masking names, the app log, app preferences, the start-at-sign-in entry). Today every uninstaller leaves users' files behind, and on Linux even a purge keeps `/var/lib/nebula-gui`.
+- [ ] macOS: a cleaner uninstall than a Terminal script, if the platform allows one
+- [ ] Tests: what each uninstall removes and keeps, on all three platforms
 
 ## M5: Polish (v1.0)
+- [ ] Update check: the app checks GitHub for a newer release and says so, with a link to the release page. Installing stays manual (ADR-009, [updates.md](updates.md)).
 - [ ] Warnings for `routes`/`unsafe_routes` before connecting
 - [ ] Cert expiry warnings
 - [ ] Import a `.zip` with the config and its key files
-- [ ] Code signing and notarization
 - [ ] User docs and screenshots
+
+## Not planned
+- Code signing and notarization. Installers stay unsigned, with the warnings the README walks through (ADR-009).
+- Installing updates from the app (ADR-009)
+- Testing on desktops other than COSMIC (Pop!_OS)
+- 32-bit builds, and processors other than 64-bit Intel/AMD on Windows and Linux (macOS stays universal)
 
 ## Later / maybe
 - Several saved profiles

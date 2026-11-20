@@ -72,7 +72,7 @@ Short records of significant decisions. Add new ones at the bottom. Don't edit a
 ---
 
 ## ADR-006: Nebula updates ship as signed app updates
-**Status:** Accepted, 2026-11-10
+**Status:** Superseded by ADR-009, 2026-11-20
 
 **Context:** Users want to check for and install Nebula client updates from the app. Nebula is built into `nebula-guid` (ADR-002).
 
@@ -142,3 +142,31 @@ Short records of significant decisions. Add new ones at the bottom. Don't edit a
 - The M4.5 updater runs the setup `.exe` silently instead of `msiexec`, and the platform-signature check covers the setup `.exe` ([updates.md](updates.md)).
 - Inno Setup undoes its own file changes when setup fails, but not what the script did (the service, the group, the firewall rule). The updater's check that the new service answers with the new version catches a failed install.
 - An administrator who wants an MSI for deployment would have to wrap the `.exe`.
+
+---
+
+## ADR-009: Updates only notify, and installers stay unsigned
+**Status:** Accepted, 2026-11-20. Supersedes ADR-006.
+
+**Context:** ADR-006 planned updates the service downloads, verifies and installs itself: a signed manifest, a minisign key, and Authenticode and Developer ID certificates for a platform-signature check. ADR-007 already left Linux to notify only. Code signing is no longer planned, and M4 showed that installing by hand works: the README walks people past the unsigned-installer warnings, and every installer upgrades in place.
+
+**Options considered:**
+1. **ADR-006 as planned**, with code signing.
+2. **ADR-006 without platform signatures:** the service installs updates checked only against a minisign-signed manifest.
+3. **Notify only:** the app checks GitHub for a newer release and links to it; people install it by hand.
+
+**Decision:** Option 3, in v1.0 (M5). Installers stay unsigned.
+
+**Why:**
+- No process downloads and runs installers as root or SYSTEM, which was the largest item in the threat model ([security.md](security.md)).
+- No signing keys to keep safe or rotate, and the release workflow stays free of secrets.
+- One rule on all three platforms, instead of Linux working differently.
+- Option 2 still needs a minisign key and a privileged installer path, for people who install a handful of releases a year.
+
+**Consequences:**
+- People install updates themselves, past the same warnings as the first install. A Nebula security fix reaches them only when they act on the notice.
+- The service has no update endpoints and no `internal/updater`; the `/v1/update` API that [ipc-api.md](ipc-api.md) described is dropped, and so is the upstream-Nebula notice.
+- A Nebula update is still a new nebula-gui release with a newer Nebula built in (ADR-002, ADR-006's reasoning).
+- ADR-007's choice of service user stands; its "Linux updates only notify" now applies everywhere. ADR-008's silent installs remain useful to administrators but no updater uses them.
+- Defender may flag an unsigned build again (it did once, see [platforms.md](platforms.md#windows)); the response is a false-positive report to Microsoft.
+- See [updates.md](updates.md).

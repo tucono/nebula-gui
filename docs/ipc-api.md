@@ -206,42 +206,13 @@ The service's settings. They apply to every user of the computer, and anyone who
 
 - `autoconnect`: when the service starts and a config is stored, it connects exactly as `POST /v1/connect` does and logs "connecting automatically". **Off by default.** Only a `PUT` turns it on: importing or deleting a config, installing and upgrading leave it alone. If Nebula fails to start (for example, the network isn't up yet at boot), the service tries again after 30 s, at most three times, and stops trying as soon as the user connects or disconnects, the setting is turned off, or the config is deleted. A rejected config (an expired cert, say) isn't retried. A failure leaves the same state and `error_reason` as a manual connect.
 
-`PUT` takes every field and returns the stored settings. A missing field, an unknown field or a value of the wrong type is `bad_request`, so update settings stay on their own endpoint (see [Updates](#updates)).
+`PUT` takes every field and returns the stored settings. A missing field, an unknown field or a value of the wrong type is `bad_request`.
 
 The service stores them in `settings.json` in its state directory (`0600`, next to the config). A missing file means the defaults; so does a damaged one, with a warning in the service log.
 
 ## Updates
 
-See [updates.md](updates.md) for how update checks and installs work.
-
-### `GET /v1/update`
-```json
-{
-  "current":   { "version": "0.3.0", "nebula_version": "1.9.3" },
-  "available": { "version": "0.4.0", "nebula_version": "1.10.0", "security": false,
-                 "notes_url": "…", "released_at": "…" },          // null if up to date
-  "upstream_nebula": { "version": "1.10.1", "url": "…" },          // null if we embed the latest
-  "state": "idle",            // idle | checking | downloading | verifying | ready | installing | error
-  "progress": 0.0,            // 0–1 while downloading
-  "last_checked": "2026-11-10T13:00:00Z",
-  "error": "",
-  "self_update_supported": true,   // false for package-manager installs on Linux
-  "settings": { "auto_check": true, "install_when_disconnected": false, "skipped_version": "" }
-}
-```
-
-### `POST /v1/update/check`
-Runs a check now and returns the result as `GET /v1/update` does. Rate-limited to one check per 60 s.
-
-### `POST /v1/update/install`
-Request: `{ "version": "0.4.0", "when": "now" }`. `when` is `now` or `disconnected`.
-
-The `version` must match the update the service already found and verified. **Clients can't provide URLs, file paths, or hashes.** The response is `202 Accepted`. The GUI then polls `GET /v1/update`, and during the install the service restarts.
-
-### `PUT /v1/update/settings`
-Request: `{ "auto_check": true, "install_when_disconnected": false, "skipped_version": "0.4.0" }`
-
-Error codes for these endpoints: `update_unavailable`, `update_not_supported`, `update_verification_failed`, `update_in_progress`.
+There are no update endpoints. The service never downloads or installs updates; from v1.0 the GUI checks GitHub for a newer release itself ([updates.md](updates.md), ADR-009).
 
 ## Versioning
 - Breaking changes increase the path prefix (`/v2`) and `api_version`.

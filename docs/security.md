@@ -16,11 +16,10 @@ The service runs with high privileges and accepts requests from local processes.
 | `sshd` debug console enabled by an imported config | `PUT /v1/config` rejects any `sshd.enabled` other than `false`. The console gives deep control over Nebula. |
 | The private key leaks through the API or logs | `GET /v1/config` redacts `pki.key`. Never log the config. The state directory is `0700` and the files are `0600`, log files included. A test runs a real Nebula with the log file at debug level and scans it for key material. |
 | Ping is used as a scanning or flooding tool | `count` 1–10, `timeout_ms` at most 15000, at most 4 pings in flight (one per peer) and 60 per minute, and only IPs inside this host's cert networks, never its own. |
-| An old or tampered service binary | The GUI checks `api_version` and shows the service version. Until code signing (M5), each release carries `SHA256SUMS` ([Releases and installers](#releases-and-installers)). |
+| An old or tampered service binary | The GUI checks `api_version` and shows the service version. Installers aren't signed (ADR-009); each release carries `SHA256SUMS` ([Releases and installers](#releases-and-installers)). |
 | A second copy of the GUI, or another program, drives the running GUI | The single-instance socket accepts one message, `show`, from the same user only ([One copy of the GUI](#one-copy-of-the-gui)). |
-| **The updater is used to install malicious code as root/SYSTEM** | The manifest is signed with a minisign key whose public half is built into the binary. The artifact's SHA-256 must match the signed manifest. Platform code signatures are checked. Downgrades are refused. The feed URL can't be set over IPC, and the install endpoint takes only a version string ([updates.md](updates.md#verification-all-must-pass-before-installing)). |
-| A downloaded installer is swapped before it runs | Downloads go to the service's `0700` state directory. The hash is checked again immediately before running the installer. |
-| Privacy of update checks | The check sends only a plain HTTPS request to GitHub, with no identifiers or telemetry. Automatic checks can be turned off. |
+| A fake update notice sends people to a malicious download | The app never downloads or installs updates (ADR-009). The update check (M5) only links to the release page on GitHub, built from the repository's fixed address, not from the response. |
+| Privacy of update checks | The check (M5) is run by the GUI as a plain HTTPS request to GitHub's API, with no identifiers or telemetry, and can be turned off ([updates.md](updates.md#privacy)). |
 
 ## The installed service
 
@@ -32,7 +31,7 @@ The service runs with high privileges and accepts requests from local processes.
 | macOS | root (launchd daemon) | everything; `utun` needs root. |
 | Windows | LocalSystem | everything; Wintun needs SYSTEM. |
 
-Nebula handles UDP from the internet and the API takes requests from every member of `nebula-gui`, so on Linux a bug in either reaches a process that can't take over the machine. The price is that the Linux service can't install updates (ADR-007 in [decisions.md](decisions.md)).
+Nebula handles UDP from the internet and the API takes requests from every member of `nebula-gui`, so on Linux a bug in either reaches a process that can't take over the machine. See ADR-007 in [decisions.md](decisions.md).
 
 ### Who can use the socket or pipe
 
@@ -55,7 +54,7 @@ The GUI listens on a per-user socket so a second copy can ask the first to show 
 ### Releases and installers
 
 - **Built in CI from a tag**, by `.github/workflows/release.yml` with only `contents: write` and no secrets. It makes a **draft** release; a person publishes it.
-- **Not signed until M5.** Windows (Edge, SmartScreen) and macOS (Gatekeeper) warn, and the README walks people past the warnings. On macOS the app and service are signed ad hoc, which Apple silicon requires, but that proves nothing about who built them. Windows builds keep their symbols and carry version details, which stopped Defender's machine-learning scan from quarantining the installer as `Program:Win32/Wacapew.A!ml`; signing is the lasting fix.
+- **Not signed, and signing isn't planned** (ADR-009). Windows (Edge, SmartScreen) and macOS (Gatekeeper) warn, and the README walks people past the warnings. On macOS the app and service are signed ad hoc, which Apple silicon requires, but that proves nothing about who built them. Windows builds keep their symbols and carry version details, which stopped Defender's machine-learning scan from quarantining the installer as `Program:Win32/Wacapew.A!ml`; if it happens again, the response is a false-positive report to Microsoft.
 - **`SHA256SUMS`** lists every file in the release. It shows a download wasn't damaged or swapped on the way, but it sits on the same page as the files, so it doesn't help against someone who controls the release. For that, the person who runs the network can send the hash another way.
 - **Wintun** isn't committed. CI downloads it from wintun.net and refuses it unless its SHA-256 matches `packaging/windows/wintun.sha256` (version 0.14.1).
 - **Dependencies' licenses** ship as `THIRD_PARTY_NOTICES.txt`, generated from the modules actually built in ([development.md](development.md#packages)).

@@ -64,7 +64,7 @@ The GUI can be closed and reopened while the tunnel stays up. Each time it conne
 
 - **Settings** (`settings.go`): `settings.json` in the state directory, read and written through `GET`/`PUT /v1/settings`. Its one setting, `autoconnect`, applies to every user of the computer. See [Service start and boot](#service-start-and-boot).
 - **OS service integration** (`cmd/nebula-guid`): on Linux and macOS, systemd and launchd run the foreground binary. On Windows, `nebula-guid.exe` has `install`, `uninstall` and `run` subcommands; `run` serves the Service Control Manager, and its Stop or Shutdown request cancels the same context a Ctrl-C does, so Nebula stops cleanly. A release build stops at once with a message if it lacks the privileges to make a tun device.
-- **Updater** (`internal/updater`, M4.5, not built yet): will check the signed release manifest, download and verify the installer, and run the platform installer. Details in [updates.md](updates.md).
+- **No updater:** the service never downloads or installs updates. From v1.0 the GUI checks GitHub for a newer release and says so ([updates.md](updates.md), ADR-009).
 
 ### GUI (`cmd/nebula-gui`, `internal/gui`)
 

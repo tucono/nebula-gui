@@ -11,7 +11,7 @@ A user loads a Nebula config. The app starts and stops the tunnel, shows which p
 
 > **Not an official Nebula project.** nebula-gui is an independent project. It is not affiliated with or endorsed by Slack or Defined Networking. Nebula is copyright Slack Technologies, Inc. and is MIT licensed. The installers include the licenses of Nebula and every other open-source part built in, in `THIRD_PARTY_NOTICES.txt`; the app opens it from Help → About nebula-gui.
 
-> **Status:** pre-alpha. The service embeds Nebula, and the GUI can import a config, connect and disconnect, show the service log, explain problems in plain language, and make a masked troubleshooting report (M2). It also lists peers under names the user chooses, pings them to open a tunnel, and closes stuck connections (M3). Installers for Linux, Windows and macOS put the service in place and start it at boot; the app sits in the tray and can connect automatically when the computer starts (M4). Updates (M4.5) and signed installers (M5) come later. See [docs/roadmap.md](docs/roadmap.md).
+> **Status:** pre-alpha. The service embeds Nebula, and the GUI can import a config, connect and disconnect, show the service log, explain problems in plain language, and make a masked troubleshooting report (M2). It also lists peers under names the user chooses, pings them to open a tunnel, and closes stuck connections (M3). Installers for Linux, Windows and macOS put the service in place and start it at boot; the app sits in the tray and can connect automatically when the computer starts (M4). Next come a full uninstall (M4.5) and, in v1.0, a notice when a new version is out (M5). See [docs/roadmap.md](docs/roadmap.md).
 
 ## Install
 
@@ -24,7 +24,7 @@ Download the file for your computer from the [releases page](https://github.com/
 | Ubuntu, Debian, Pop!_OS, Mint (64-bit Intel/AMD) | `nebula-gui_<version>-1_amd64.deb` |
 | Fedora (64-bit Intel/AMD) | `nebula-gui-<version>-1.x86_64.rpm` |
 
-The installers aren't signed yet (that's planned for v1.0), so Windows and macOS warn that they don't know who made them. The steps below get past those warnings. If you'd like to make sure the file is the one that was published, see [Checking a download](#checking-a-download) first.
+The installers aren't signed, and there are no plans to sign them, so Windows and macOS warn that they don't know who made them. The steps below get past those warnings. If you'd like to make sure the file is the one that was published, see [Checking a download](#checking-a-download) first.
 
 ### Windows
 
@@ -82,13 +82,15 @@ This shows the file wasn't damaged or swapped after it was published. Since `SHA
 - Start and stop the Nebula connection with one click.
 - Show active and pending peer tunnels: name, overlay IP, real endpoint, and whether the tunnel is direct or relayed.
 - Ping a peer's overlay IP to open a tunnel and measure round-trip time.
-- Check for updates and install them, including new Nebula versions. Updates are signed and verified ([docs/updates.md](docs/updates.md)).
+- Say when a new version is on GitHub, including one with a newer Nebula. Installing it stays a manual download ([docs/updates.md](docs/updates.md)).
 - Run on **Windows, Linux, and macOS**. Android and iOS are stretch goals (see [docs/platforms.md](docs/platforms.md#mobile)).
 
 ## Non-goals (for now)
 
 - Acting as a certificate authority or managing a fleet. Use `nebula-cert` or Defined Networking for that.
 - Running more than one Nebula network at the same time. This may be added after v1.
+- Installing updates from the app, and signed installers (ADR-009 in [docs/decisions.md](docs/decisions.md)).
+- Builds for 32-bit or ARM Windows and Linux, and testing on desktops other than COSMIC (Pop!_OS).
 
 ## Tech stack
 
@@ -112,7 +114,7 @@ The reasons for each choice are in [docs/decisions.md](docs/decisions.md).
 | [docs/development.md](docs/development.md) | Toolchain setup, repo layout, building and running, packages and releases |
 | [docs/testing.md](docs/testing.md) | Unit tests and a local multi-node Nebula test lab |
 | [docs/platforms.md](docs/platforms.md) | What each installer sets up per OS, known issues, mobile |
-| [docs/updates.md](docs/updates.md) | Update checks, the signed manifest, installing on each OS |
+| [docs/updates.md](docs/updates.md) | Installing new versions, and the new-version check |
 | [docs/security.md](docs/security.md) | Threat model and service hardening rules |
 | [docs/decisions.md](docs/decisions.md) | Architecture decision records |
 | [docs/roadmap.md](docs/roadmap.md) | Milestones |

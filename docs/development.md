@@ -57,8 +57,6 @@ testlab/             # scripts + configs for a local multi-node Nebula network
 Makefile
 ```
 
-`internal/updater/` comes with M4.5 ([updates.md](updates.md)).
-
 Rules:
 - **Only `internal/nebulactl` imports `github.com/slackhq/nebula`.** This keeps Nebula API changes, which do happen between minor versions, in one place.
 - **`internal/gui` never imports `internal/service`.** The GUI and service communicate only through `internal/api`.
