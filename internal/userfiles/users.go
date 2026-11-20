@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,6 +17,9 @@ import (
 type User struct {
 	Name string
 	Home string
+	// SID is the account's security ID on Windows, which names their
+	// registry hive; it's empty elsewhere.
+	SID string
 }
 
 // Users lists the people with accounts on this computer: on Linux the
@@ -45,8 +49,9 @@ func parsePasswd(r io.Reader) []User {
 		if err != nil || uid < firstUID || uid == nobodyUID {
 			continue
 		}
+		// passwd paths are Unix paths, whatever OS reads them (tests).
 		home := f[5]
-		if !filepath.IsAbs(home) || filepath.Clean(home) == "/" {
+		if !path.IsAbs(home) || path.Clean(home) == "/" {
 			continue
 		}
 		out = append(out, User{Name: f[0], Home: home})

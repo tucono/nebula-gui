@@ -29,12 +29,12 @@ func TestParseRemoveUserFiles(t *testing.T) {
 func TestRemoveForCarriesOn(t *testing.T) {
 	users := []userfiles.User{{Name: "alice", Home: "/home/alice"}, {Name: "bob", Home: "/home/bob"}}
 	var seen []string
-	remove := func(home string, autostartOnly bool) ([]string, error) {
+	remove := func(u userfiles.User, autostartOnly bool) ([]string, error) {
 		if !autostartOnly {
 			t.Error("autostartOnly wasn't passed on")
 		}
-		seen = append(seen, home)
-		if home == "/home/alice" {
+		seen = append(seen, u.Home)
+		if u.Home == "/home/alice" {
 			return []string{"/home/alice/a"}, errors.New("permission denied")
 		}
 		return []string{"/home/bob/b"}, nil

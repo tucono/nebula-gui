@@ -51,18 +51,18 @@ func removeUserFiles(args []string) error {
 	if err != nil {
 		return err
 	}
-	return removeFor(users, f.autostartOnly, userfiles.Remove, os.Stdout, os.Stderr)
+	return removeFor(users, f.autostartOnly, userfiles.RemoveUser, os.Stdout, os.Stderr)
 }
 
 // removeFor removes each user's files with remove, printing what it
 // removed to out and what it couldn't to errOut. One user's failure
 // doesn't stop the others.
 func removeFor(users []userfiles.User, autostartOnly bool,
-	remove func(home string, autostartOnly bool) ([]string, error), out, errOut io.Writer,
+	remove func(u userfiles.User, autostartOnly bool) ([]string, error), out, errOut io.Writer,
 ) error {
 	failed := false
 	for _, u := range users {
-		removed, err := remove(u.Home, autostartOnly)
+		removed, err := remove(u, autostartOnly)
 		for _, p := range removed {
 			_, _ = fmt.Fprintln(out, "removed", p)
 		}

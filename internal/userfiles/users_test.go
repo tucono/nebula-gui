@@ -25,7 +25,7 @@ func TestParsePasswd(t *testing.T) {
 		"",
 	}, "\n")
 	got := parsePasswd(strings.NewReader(in))
-	want := []User{{"alice", "/home/alice"}, {"bob", "/home/bob"}}
+	want := []User{{Name: "alice", Home: "/home/alice"}, {Name: "bob", Home: "/home/bob"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parsePasswd = %+v, want %+v", got, want)
 	}
@@ -43,7 +43,7 @@ func TestHomesIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []User{{"alice", filepath.Join(dir, "alice")}, {"bob", filepath.Join(dir, "bob")}}
+	want := []User{{Name: "alice", Home: filepath.Join(dir, "alice")}, {Name: "bob", Home: filepath.Join(dir, "bob")}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("homesIn = %+v, want %+v", got, want)
 	}

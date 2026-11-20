@@ -12,6 +12,16 @@ import (
 	"runtime"
 )
 
+// RemoveUser removes u's nebula-gui files, or only their start-at-sign-in
+// entry with autostartOnly: the files under their home folder, as Remove
+// does, and on Windows the registry values in their hive. It returns what
+// it removed, as paths and registry value names.
+func RemoveUser(u User, autostartOnly bool) ([]string, error) {
+	removed, err := Remove(u.Home, autostartOnly)
+	values, regErr := removeAutostartValues(u)
+	return append(removed, values...), errors.Join(err, regErr)
+}
+
 // Remove removes a user's nebula-gui files under home, or only the
 // start-at-sign-in file with autostartOnly. It returns the paths it
 // removed. A file that isn't there isn't an error; each one that can't be
