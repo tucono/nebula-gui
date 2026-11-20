@@ -38,7 +38,7 @@ rm -rf /var/lib/nebula-gui
 # them, so a symlink in their home folder can't lead root elsewhere.
 getent passwd | while IFS=: read -r name _ uid _ _ home _; do
 	case "$uid" in '' | *[!0-9]*) continue ;; esac
-	[ "$uid" -ge 1000 ] && [ "$uid" -ne 65534 ] || continue
+	if [ "$uid" -lt 1000 ] || [ "$uid" -eq 65534 ]; then continue; fi
 	case "$home" in /?*) ;; *) continue ;; esac
 	[ -d "$home" ] || continue
 	echo "$user_paths" | while IFS= read -r p; do

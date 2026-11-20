@@ -31,11 +31,11 @@ func TestPostremoveNamesLinuxFiles(t *testing.T) {
 		t.Errorf("postremove.sh user_paths = %q, want %q", got, want)
 	}
 	for _, rule := range []string{
-		`"$uid" -ge ` + strconv.Itoa(firstUID),
-		`"$uid" -ne ` + strconv.Itoa(nobodyUID),
+		`"$uid" -lt ` + strconv.Itoa(firstUID),
+		`"$uid" -eq ` + strconv.Itoa(nobodyUID),
 	} {
 		if !strings.Contains(s, rule) {
-			t.Errorf("postremove.sh doesn't pick accounts with %s, as parsePasswd does", rule)
+			t.Errorf("postremove.sh doesn't skip accounts with %s, as parsePasswd does", rule)
 		}
 	}
 }

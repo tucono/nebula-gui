@@ -57,11 +57,13 @@ seed_user() {
 		rm -rf "$home/.cache"
 		ln -s "$trap_dir" "$home/.cache"
 	fi
+	# The script runs as u, with u's $HOME; its arguments are the lists.
+	# shellcheck disable=SC2016
 	runuser -u "$u" -- sh -c '
 		cd "$HOME" || exit 1
 		put() { mkdir -p "$(dirname "$1")" && echo "{}" >"$1"; }
 		echo "$1" | while IFS= read -r d; do
-			# bob'"'"'s cache folder is root'"'"'s, through the symlink.
+			# Through the symlink, the cache folder of bob belongs to root.
 			[ -L .cache ] && [ "$d" = .cache/nebula-gui ] && continue
 			put "$d/saved.json"
 		done
