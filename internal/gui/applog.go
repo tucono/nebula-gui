@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tucono/nebula-gui/internal/userfiles"
 )
 
 const (
@@ -73,11 +75,11 @@ func openAppLog(dir string) (*appLog, error) {
 
 // defaultAppLogDir is <user config dir>/nebula-gui/logs.
 func defaultAppLogDir() (string, error) {
-	d, err := os.UserConfigDir()
+	d, err := userfiles.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(d, "nebula-gui", "logs"), nil
+	return filepath.Join(d, "logs"), nil
 }
 
 // Add records msg with attributes given as key, value pairs. A key without

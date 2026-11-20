@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/tucono/nebula-gui/internal/userfiles"
 )
 
 // desktopFile is ~/.config/autostart/nebula-gui.desktop, which desktops
@@ -34,7 +36,7 @@ func newEntry(exe string) (Entry, error) {
 		return nil, err
 	}
 	return &desktopFile{
-		path:   filepath.Join(dir, "autostart", "nebula-gui.desktop"),
+		path:   filepath.Join(dir, "autostart", userfiles.AutostartName),
 		exe:    exe,
 		reload: reloadUserManager,
 	}, nil

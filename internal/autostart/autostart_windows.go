@@ -6,15 +6,14 @@ package autostart
 import (
 	"errors"
 
+	"github.com/tucono/nebula-gui/internal/userfiles"
 	"golang.org/x/sys/windows/registry"
 )
 
 const (
-	runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
-	// approvedKey is where Task Manager's Startup apps page records that
-	// the user turned an entry off, leaving the Run value in place.
-	approvedKey = `Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run`
-	valueName   = "nebula-gui"
+	runKey      = userfiles.RunKey
+	approvedKey = userfiles.ApprovedKey
+	valueName   = userfiles.RunValue
 )
 
 // runValue is the nebula-gui value under HKCU's Run key, which Windows runs

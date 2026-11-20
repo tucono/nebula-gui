@@ -13,20 +13,21 @@ import (
 	"runtime"
 
 	"github.com/tucono/nebula-gui/internal/ipc"
+	"github.com/tucono/nebula-gui/internal/userfiles"
 )
 
 // defaultInstanceAddr is the per-user socket: in $XDG_RUNTIME_DIR on Linux,
 // and in the user's cache directory on macOS or when there's no runtime
 // directory.
 func defaultInstanceAddr() (string, error) {
-	base := os.Getenv("XDG_RUNTIME_DIR")
-	if runtime.GOOS == "darwin" || base == "" {
-		var err error
-		if base, err = os.UserCacheDir(); err != nil {
-			return "", err
-		}
+	if base := os.Getenv("XDG_RUNTIME_DIR"); runtime.GOOS != "darwin" && base != "" {
+		return filepath.Join(base, userfiles.DirName, "gui.sock"), nil
 	}
-	return filepath.Join(base, appName, "gui.sock"), nil
+	dir, err := userfiles.CacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "gui.sock"), nil
 }
 
 // listenInstance listens on a 0600 socket at addr, in a directory only this

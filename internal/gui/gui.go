@@ -17,9 +17,10 @@ import (
 
 	"github.com/tucono/nebula-gui/internal/api"
 	"github.com/tucono/nebula-gui/internal/autostart"
+	"github.com/tucono/nebula-gui/internal/userfiles"
 )
 
-const appID = "io.github.tucono.nebulagui"
+const appID = userfiles.AppID
 
 // Options configures the GUI.
 type Options struct {

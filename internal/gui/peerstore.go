@@ -14,6 +14,8 @@ import (
 	"sync"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/tucono/nebula-gui/internal/userfiles"
 )
 
 // Saved peer limits. See docs/m3-plan.md#saved-peers.
@@ -91,11 +93,11 @@ type peerStore struct {
 
 // defaultPeerStorePath is <user config dir>/nebula-gui/peers.json.
 func defaultPeerStorePath() (string, error) {
-	d, err := os.UserConfigDir()
+	d, err := userfiles.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(d, "nebula-gui", peerStoreName), nil
+	return filepath.Join(d, peerStoreName), nil
 }
 
 // openPeerStore loads the peers saved at path. A missing or damaged file

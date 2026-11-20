@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/tucono/nebula-gui/internal/userfiles"
 )
 
 // masker replaces private network details in a troubleshooting report with
@@ -468,11 +470,11 @@ const nameStoreName = "mask-names.json"
 
 // defaultNameStorePath is <user config dir>/nebula-gui/mask-names.json.
 func defaultNameStorePath() (string, error) {
-	d, err := os.UserConfigDir()
+	d, err := userfiles.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(d, "nebula-gui", nameStoreName), nil
+	return filepath.Join(d, nameStoreName), nil
 }
 
 // openNameStore loads the names saved at path. A missing or damaged file

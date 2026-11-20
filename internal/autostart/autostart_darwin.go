@@ -13,10 +13,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/tucono/nebula-gui/internal/userfiles"
 )
 
 // agentLabel names the LaunchAgent and its file.
-const agentLabel = "io.github.tucono.nebulagui"
+const agentLabel = userfiles.AppID
 
 // launchAgent is ~/Library/LaunchAgents/<label>.plist, which launchd runs
 // when the user signs in. It isn't loaded now; the app is already running.
