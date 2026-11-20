@@ -77,9 +77,13 @@ jobs:
           sudo apt-get install -y ./dist/*.deb
           sudo packaging/linux/check-install.sh --running "$USER"
 
+      # Each user's files: two test users, alice and bob, made by
+      # check-uninstall.sh seed.
       - name: Remove the .deb and check what's left
         run: |
+          sudo packaging/linux/check-uninstall.sh seed
           sudo apt-get remove -y nebula-gui
+          sudo packaging/linux/check-uninstall.sh kept
           if systemctl list-unit-files nebula-guid.service | grep -q nebula-guid; then
             echo "FAIL: the unit is still installed"; exit 1
           fi
@@ -89,10 +93,31 @@ jobs:
           sudo test -d /var/lib/nebula-gui || { echo "FAIL: the state directory was removed"; exit 1; }
           echo "remove check passed"
 
-      - name: Install the .rpm in Fedora and check it
+      - name: Reinstall, purge the .deb, and check nothing's left
         run: |
-          docker run --rm -v "$PWD:/src:ro" -w /src fedora:latest sh -c \
-            'dnf install -y dist/*.rpm && packaging/linux/check-install.sh'
+          sudo apt-get install -y ./dist/*.deb
+          sudo packaging/linux/check-install.sh --running "$USER"
+          sudo packaging/linux/check-uninstall.sh seed
+          sudo apt-get purge -y nebula-gui
+          sudo packaging/linux/check-uninstall.sh gone
+
+      # rpm has no purge: remove-everything, then dnf remove. It reports
+      # bob's symlinked cache folder, which it must not follow, as a
+      # failure, so its exit status is left to check-uninstall.sh.
+      - name: Install the .rpm in Fedora, remove it both ways, and check
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -w /src fedora:latest sh -ec '
+            dnf install -y util-linux procps-ng
+            dnf install -y dist/*.rpm
+            packaging/linux/check-install.sh
+            packaging/linux/check-uninstall.sh seed
+            dnf remove -y nebula-gui
+            packaging/linux/check-uninstall.sh kept
+            dnf install -y dist/*.rpm
+            packaging/linux/check-uninstall.sh seed
+            /usr/libexec/nebula-gui/nebula-guid remove-everything --yes || true
+            dnf remove -y nebula-gui
+            packaging/linux/check-uninstall.sh gone'
 
       - uses: actions/upload-artifact@v7
         with:

@@ -8,7 +8,8 @@
 // run it, and how it runs during development. On Windows the commands
 // install, uninstall and run register it with the Service Control Manager
 // and run under it. On every system, remove-user-files removes each user's
-// nebula-gui files for the uninstallers.
+// nebula-gui files for the uninstallers; on Linux, remove-everything also
+// removes the service's state, user and group, since rpm has no purge.
 package main
 
 import (
@@ -57,6 +58,8 @@ func run(args []string) error {
 		return runService(rest)
 	case "remove-user-files":
 		return removeUserFiles(rest)
+	case "remove-everything":
+		return removeEverything(rest)
 	default:
 		return foreground(rest)
 	}
@@ -69,10 +72,10 @@ func splitCommand(args []string) (cmd string, rest []string, err error) {
 		return "", args, nil
 	}
 	switch args[0] {
-	case "install", "uninstall", "run", "remove-user-files":
+	case "install", "uninstall", "run", "remove-user-files", "remove-everything":
 		return args[0], args[1:], nil
 	}
-	return "", nil, fmt.Errorf("unknown command %q (commands: install, uninstall, run, remove-user-files)", args[0])
+	return "", nil, fmt.Errorf("unknown command %q (commands: install, uninstall, run, remove-user-files, remove-everything)", args[0])
 }
 
 // options are the flags for running the service, in the foreground or
