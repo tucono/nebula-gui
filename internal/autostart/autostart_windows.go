@@ -6,8 +6,9 @@ package autostart
 import (
 	"errors"
 
-	"github.com/tucono/nebula-gui/internal/userfiles"
 	"golang.org/x/sys/windows/registry"
+
+	"github.com/tucono/nebula-gui/internal/userfiles"
 )
 
 const (
