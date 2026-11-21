@@ -139,6 +139,8 @@ CI installs and removes every package on each push ([development.md](development
 
 In M4 these ran step by step as each installer was built, and the release candidates (`v0.1.0-rc.1` to `rc.3`) were then downloaded, installed and connected on all three. Findings: the release check expected the wrong `.deb` name (fixed), Defender quarantined an unsigned, stripped Windows build (fixed with version details and unstripped Windows builds), and the Windows VM needs Mesa for OpenGL ([platforms.md](platforms.md#windows)).
 
+In M4.5 the full-uninstall smoke tests ([m4.5-plan.md](m4.5-plan.md#smoke-tests)) passed on `v0.1.1-rc.1`: the Windows VM with a second, signed-out user, the Mac through both the Uninstall app and the Help menu, and Pop!_OS through `apt remove`, a reinstall and `apt purge`. Note the service's unit is `nebula-guid`: `systemctl is-active nebula-gui` prints `inactive` because there's no unit by that name.
+
 ### Relay scenario (later)
 With every node on 127.0.0.1, direct UDP can't be blocked per host. Testing relays needs separate network namespaces or containers: block direct UDP between alice and the dev host, enable `relay.use_relays` and `am_relay` on the lighthouse, and check that the peer row shows `relayed: true`.
 
