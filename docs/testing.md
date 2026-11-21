@@ -135,7 +135,7 @@ CI installs and removes every package on each push ([development.md](development
 9. **Another account** (Windows: a non-admin account added with `net localgroup nebula-gui <name> /add`, then signed in) can use the app. An account not in the group gets the no-permission problem with the right command.
 10. **Help → About nebula-gui** shows the version and the notice, and **Open-source licenses** opens `THIRD_PARTY_NOTICES.txt`.
 11. **Upgrade** by installing a newer build over it: the connection comes back if it was up, and no one is granted access.
-12. **Uninstall:** the service and tun device are gone, the state directory remains. Then remove it (Linux: delete `/var/lib/nebula-gui`; macOS: `--remove-settings`; Windows: answer Yes) and check it's gone.
+12. **Uninstall,** keeping settings: the service, tun device and start-at-sign-in entry are gone; the state directory and `~/.config/nebula-gui` (or its equivalent) remain. Then reinstall and remove everything (Linux: `apt purge`; macOS: **Remove everything and uninstall**; Windows: answer Yes) and check those are gone too. The M4.5 smoke tests in [m4.5-plan.md](m4.5-plan.md#smoke-tests) do this with two users.
 
 In M4 these ran step by step as each installer was built, and the release candidates (`v0.1.0-rc.1` to `rc.3`) were then downloaded, installed and connected on all three. Findings: the release check expected the wrong `.deb` name (fixed), Defender quarantined an unsigned, stripped Windows build (fixed with version details and unstripped Windows builds), and the Windows VM needs Mesa for OpenGL ([platforms.md](platforms.md#windows)).
 

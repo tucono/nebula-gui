@@ -50,9 +50,9 @@ Detailed plan: [m4-plan.md](m4-plan.md).
 ## M4.5: Full uninstall
 Detailed plan: [m4.5-plan.md](m4.5-plan.md).
 
-- [ ] An option to remove everything: the service's state (imported config, logs, settings) and each user's own files (saved peer names, masking names, the app log, app preferences, the start-at-sign-in entry). Today every uninstaller leaves users' files behind, and on Linux even a purge keeps `/var/lib/nebula-gui`.
-- [ ] macOS: a cleaner uninstall than a Terminal script, if the platform allows one
-- [ ] Tests: what each uninstall removes and keeps, on all three platforms
+- [x] An option to remove everything: the service's state (imported config, logs, settings) and each user's own files (saved peer names, masking names, the app log, app preferences, the start-at-sign-in entry). Every uninstall now removes every user's start-at-sign-in entry; removing everything is a question on Windows and macOS, `apt purge` on Debian-based systems, and `nebula-guid remove-everything` on Fedora.
+- [x] macOS: an **Uninstall nebula-gui** app in Applications, also opened from **Help → Uninstall nebula-gui…**
+- [x] Tests: what each uninstall removes and keeps, on all three platforms (CI; the smoke tests with a second user run on the next release candidate)
 
 ## M5: Polish (v1.0)
 - [ ] Update check: the app checks GitHub for a newer release and says so, with a link to the release page. Installing stays manual (ADR-009, [updates.md](updates.md)).

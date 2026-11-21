@@ -11,7 +11,7 @@ A user loads a Nebula config. The app starts and stops the tunnel, shows which p
 
 > **Not an official Nebula project.** nebula-gui is an independent project. It is not affiliated with or endorsed by Slack or Defined Networking. Nebula is copyright Slack Technologies, Inc. and is MIT licensed. The installers include the licenses of Nebula and every other open-source part built in, in `THIRD_PARTY_NOTICES.txt`; the app opens it from Help → About nebula-gui.
 
-> **Status:** pre-alpha. The service embeds Nebula, and the GUI can import a config, connect and disconnect, show the service log, explain problems in plain language, and make a masked troubleshooting report (M2). It also lists peers under names the user chooses, pings them to open a tunnel, and closes stuck connections (M3). Installers for Linux, Windows and macOS put the service in place and start it at boot; the app sits in the tray and can connect automatically when the computer starts (M4). Next come a full uninstall (M4.5) and, in v1.0, a notice when a new version is out (M5). See [docs/roadmap.md](docs/roadmap.md).
+> **Status:** pre-alpha. The service embeds Nebula, and the GUI can import a config, connect and disconnect, show the service log, explain problems in plain language, and make a masked troubleshooting report (M2). It also lists peers under names the user chooses, pings them to open a tunnel, and closes stuck connections (M3). Installers for Linux, Windows and macOS put the service in place and start it at boot; the app sits in the tray and can connect automatically when the computer starts (M4). Uninstalling can remove everything the app saved, for every user of the computer (M4.5). Next, in v1.0, comes a notice when a new version is out (M5). See [docs/roadmap.md](docs/roadmap.md).
 
 ## Install
 
@@ -32,7 +32,7 @@ The installers aren't signed, and there are no plans to sign them, so Windows an
 2. **Run it.** SmartScreen says "Windows protected your PC". Click **More info**, then **Run anyway**. Windows then asks for permission to make changes: click **Yes** (or ask someone with an administrator account to type their password).
 3. Follow the installer. At the end it opens nebula-gui. You can use the app straight away; other people who share the computer need to be added to the `nebula-gui` group (see [docs/platforms.md](docs/platforms.md#windows)).
 
-**To uninstall:** Settings → Apps, find nebula-gui, and choose Uninstall. It asks whether to remove your Nebula settings too; the default keeps them for a reinstall.
+**To uninstall:** Settings → Apps, find nebula-gui, and choose Uninstall. It asks whether to remove everything nebula-gui saved on this computer: the imported config, and every user's saved peer names, app log and settings. The default, No, keeps them for a reinstall.
 
 ### macOS
 
@@ -41,7 +41,7 @@ The installers aren't signed, and there are no plans to sign them, so Windows an
    On macOS 14 and earlier you can instead right-click the `.pkg` in Finder, choose **Open**, then **Open** again.
 3. Follow the installer. It installs nebula-gui in Applications, starts the background service, and gives you access to it.
 
-**To uninstall:** run `sudo /usr/local/libexec/nebula-gui/uninstall.sh` in Terminal. Add `--remove-settings` to remove your imported config too. Dragging the app to the Trash leaves the background service running.
+**To uninstall:** open **Uninstall nebula-gui** in Applications, or choose **Help → Uninstall nebula-gui…** in the app. Choose **Keep settings and uninstall** to use them again after a reinstall, or **Remove everything and uninstall** to also remove the imported config and every user's saved peer names, app log and settings. From Terminal it's `sudo /usr/local/libexec/nebula-gui/uninstall.sh`, adding `--remove-everything` for the second. Dragging the app to the Trash leaves the background service running.
 
 ### Linux
 
@@ -55,7 +55,19 @@ The installers aren't signed, and there are no plans to sign them, so Windows an
 
 Other people who share the computer: `sudo usermod -aG nebula-gui <their login name>`, then they restart too.
 
-**To uninstall:** `sudo apt remove nebula-gui` or `sudo dnf remove nebula-gui`. Your imported config stays in `/var/lib/nebula-gui`; delete that directory to remove it.
+**To uninstall:** `sudo apt remove nebula-gui` or `sudo dnf remove nebula-gui`. This keeps the imported config and each user's settings for a reinstall.
+
+**To remove everything** (the imported config, every user's saved peer names, app log and settings, and the `nebula-gui` group):
+```sh
+sudo apt purge nebula-gui        # Ubuntu, Debian, Pop!_OS, Mint (also after apt remove)
+
+# Fedora: rpm has no purge, so remove everything first, then the package
+sudo systemctl disable --now nebula-guid
+sudo /usr/libexec/nebula-gui/nebula-guid remove-everything
+sudo dnf remove nebula-gui
+```
+
+On every system, removing everything reaches a user's files only when their home folder is there to read: one that's encrypted or on a network server while they're signed out is skipped.
 
 ### Checking a download
 
