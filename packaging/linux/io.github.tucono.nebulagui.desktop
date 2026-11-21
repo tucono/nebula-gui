@@ -1,0 +1,16 @@
+# @authorship: AI-Assisted
+# @architect: AI (Claude Opus 5.5)
+#
+# Named after the app ID, which the GUI's windows use as their Wayland
+# app_id, so desktops match the window to this entry and its icon.
+[Desktop Entry]
+Type=Application
+Name=nebula-gui
+GenericName=Nebula network
+Comment=Connect to your Nebula network
+Exec=nebula-gui
+Icon=io.github.tucono.nebulagui
+Terminal=false
+Categories=Network;
+Keywords=nebula;vpn;overlay;mesh;
+StartupNotify=true

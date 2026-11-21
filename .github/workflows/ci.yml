@@ -1,0 +1,256 @@
+name: CI
+
+on:
+  push:
+    branches: [main, monolithic]
+  pull_request:
+  # release.yml runs these jobs on a tag and releases the packages they
+  # built and checked.
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install Fyne build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Vet (dev build)
+        run: go vet -tags dev ./cmd/nebula-guid
+
+      - name: Test
+        run: go test ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+
+  # The Linux packages, built on the oldest Ubuntu LTS runner so the GUI's
+  # glibc floor stays low. The .deb is installed on the runner itself, which
+  # runs systemd, so the service really starts; the .rpm is installed in a
+  # Fedora container, which checks files, user and group only.
+  package-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # packaging/version.sh counts commits and reads tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install Fyne build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
+
+      - name: Check the package scripts
+        run: shellcheck packaging/version.sh packaging/linux/*.sh packaging/macos/*.sh packaging/macos/scripts/*
+
+      - name: Build the packages
+        run: make package-linux
+
+      - name: Install the .deb and check it
+        run: |
+          sudo apt-get install -y ./dist/*.deb
+          sudo packaging/linux/check-install.sh --running "$USER"
+
+      # Each user's files: two test users, alice and bob, made by
+      # check-uninstall.sh seed.
+      - name: Remove the .deb and check what's left
+        run: |
+          sudo packaging/linux/check-uninstall.sh seed
+          sudo apt-get remove -y nebula-gui
+          sudo packaging/linux/check-uninstall.sh kept
+          if systemctl list-unit-files nebula-guid.service | grep -q nebula-guid; then
+            echo "FAIL: the unit is still installed"; exit 1
+          fi
+          if pgrep -x nebula-guid; then
+            echo "FAIL: the service is still running"; exit 1
+          fi
+          sudo test -d /var/lib/nebula-gui || { echo "FAIL: the state directory was removed"; exit 1; }
+          echo "remove check passed"
+
+      - name: Reinstall, purge the .deb, and check nothing's left
+        run: |
+          sudo apt-get install -y ./dist/*.deb
+          sudo packaging/linux/check-install.sh --running "$USER"
+          sudo packaging/linux/check-uninstall.sh seed
+          sudo apt-get purge -y nebula-gui
+          sudo packaging/linux/check-uninstall.sh gone
+
+      # rpm has no purge: remove-everything, then dnf remove. It reports
+      # bob's symlinked cache folder, which it must not follow, as a
+      # failure, so its exit status is left to check-uninstall.sh.
+      - name: Install the .rpm in Fedora, remove it both ways, and check
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -w /src fedora:latest sh -ec '
+            dnf install -y util-linux procps-ng
+            dnf install -y dist/*.rpm
+            packaging/linux/check-install.sh
+            packaging/linux/check-uninstall.sh seed
+            dnf remove -y nebula-gui
+            packaging/linux/check-uninstall.sh kept
+            dnf install -y dist/*.rpm
+            packaging/linux/check-uninstall.sh seed
+            /usr/libexec/nebula-gui/nebula-guid remove-everything --yes || true
+            dnf remove -y nebula-gui
+            packaging/linux/check-uninstall.sh gone'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+          retention-days: 7
+
+  # The macOS installer, a universal .pkg, installed on the runner (where
+  # launchd really starts the service), then removed twice: keeping the
+  # settings, then removing them.
+  package-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # packaging/version.sh counts commits and reads tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build the package
+        run: make package-macos
+
+      - name: Install and check
+        run: |
+          sudo installer -verbose -pkg dist/nebula-gui-*-macos-universal.pkg -target /
+          sudo packaging/macos/check-install.sh installed
+
+      # Each user's files: the runner's, and a second home folder in
+      # /Users, which is where remove-user-files looks.
+      - name: Uninstall, keeping the settings, and check
+        run: |
+          sudo packaging/macos/check-uninstall.sh seed
+          sudo /usr/local/libexec/nebula-gui/uninstall.sh
+          sudo packaging/macos/check-install.sh removed
+          sudo packaging/macos/check-uninstall.sh kept
+
+      - name: Reinstall, uninstall with --remove-everything, and check
+        run: |
+          sudo installer -pkg dist/nebula-gui-*-macos-universal.pkg -target /
+          sudo packaging/macos/check-install.sh installed
+          sudo packaging/macos/check-uninstall.sh seed
+          sudo /usr/local/libexec/nebula-gui/uninstall.sh --remove-everything
+          sudo packaging/macos/check-install.sh purged
+          sudo packaging/macos/check-uninstall.sh gone
+
+      - name: Show the logs
+        if: always()
+        run: |
+          grep -i nebula /var/log/install.log | tail -50 || true
+          sudo cat /var/log/nebula-guid.log 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-package
+          path: dist/*.pkg
+          retention-days: 7
+
+  # The Windows installer, installed silently on the runner (an
+  # administrator, and a machine where services run), then uninstalled
+  # twice: keeping the settings, then removing them.
+  package-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # packaging/version.sh counts commits and reads tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install Inno Setup
+        run: |
+          if [ ! -f "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then
+            choco install innosetup --no-progress -y
+          fi
+
+      - name: Load a user's registry hive (needs the administrator runner)
+        run: |
+          go test -v -count=1 -run 'TestRemoveAutostartValuesFromHiveFile' ./internal/userfiles | tee hive.log
+          ! grep -q -- '--- SKIP' hive.log
+
+      - name: Build the installer
+        run: make package-windows
+
+      - name: Install and check
+        shell: pwsh
+        run: |
+          $setup = (Get-Item dist\nebula-gui-*-windows-amd64-setup.exe).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\install.log"
+          packaging\windows\check-install.ps1 -State Installed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Uninstall, keeping the settings, and check
+        shell: pwsh
+        run: |
+          packaging\windows\check-uninstall.ps1 -State Seed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $unins = Join-Path $env:ProgramFiles 'nebula-gui\unins000.exe'
+          Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\uninstall.log"
+          # The uninstaller hands over to a copy of itself and returns early.
+          for ($i = 0; $i -lt 120 -and (Test-Path $unins); $i++) { Start-Sleep 1 }
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(_iu|unins|nebula|net|sc|taskkill|netsh)' } | Format-Table ProcessId, ParentProcessId, Name, CommandLine -AutoSize -Wrap
+          packaging\windows\check-install.ps1 -State Removed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          packaging\windows\check-uninstall.ps1 -State Kept; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Reinstall, uninstall with /REMOVESETTINGS, and check
+        shell: pwsh
+        run: |
+          $setup = (Get-Item dist\nebula-gui-*-windows-amd64-setup.exe).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$PWD\dist\reinstall.log"
+          packaging\windows\check-install.ps1 -State Installed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          packaging\windows\check-uninstall.ps1 -State Seed; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $unins = Join-Path $env:ProgramFiles 'nebula-gui\unins000.exe'
+          Start-Process -Wait -FilePath $unins -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/REMOVESETTINGS', "/LOG=$PWD\dist\purge.log"
+          for ($i = 0; $i -lt 120 -and (Test-Path $unins); $i++) { Start-Sleep 1 }
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(_iu|unins|nebula|net|sc|taskkill|netsh)' } | Format-Table ProcessId, ParentProcessId, Name, CommandLine -AutoSize -Wrap
+          packaging\windows\check-install.ps1 -State Purged; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          packaging\windows\check-uninstall.ps1 -State Gone; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Show the setup logs
+        if: always()
+        run: for f in dist/*.log; do [ -f "$f" ] && { echo "=== $f"; cat "$f"; }; done; true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: dist/*-setup.exe
+          retention-days: 7

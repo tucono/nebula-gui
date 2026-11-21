@@ -1,0 +1,58 @@
+# @authorship: AI-Assisted
+# @architect: AI (Gemini 4 Hydrogen)
+#
+# Template for your own personal client devices (laptop, desktop, phone).
+# Sign certificates with: nebula-cert sign -name ... -groups admin
+#
+# Copy to ~/nebula-ca/config-template-personal.yml, replace the example
+# lighthouse values, and build configs with:
+#   make-config.sh -t config-template-personal.yml ca.crt host.crt host.key
+#
+# Don't add a pki section here, and keep sshd off: nebula-gui refuses
+# configs that turn the SSH console on.
+
+static_host_map:
+  "192.168.100.1": ["lighthouse.example.net:4242"]
+
+lighthouse:
+  am_lighthouse: false
+  interval: 60
+  hosts:
+    - "192.168.100.1"
+
+listen:
+  host: "[::]"
+  port: 0
+
+punchy:
+  punch: true
+
+relay:
+  relays:
+    - "192.168.100.1"
+  use_relays: true
+
+tun:
+  mtu: 1300
+
+logging:
+  level: info
+
+firewall:
+  outbound:
+    - port: any
+      proto: any
+      host: any
+  inbound:
+    # ping from anyone on the network
+    - port: any
+      proto: icmp
+      host: any
+    # maximum access from your own devices (SSH, local services, apps)
+    - port: any
+      proto: any
+      group: admin
+    # optional: peer-to-peer gaming or filesharing with friends from this device
+    - port: 22000          # Syncthing
+      proto: any
+      group: friends

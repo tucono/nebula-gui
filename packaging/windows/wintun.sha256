@@ -1,0 +1,7 @@
+# @authorship: AI-Assisted
+# @architect: AI (Claude Opus 5.5)
+#
+# The Wintun release the Windows installer bundles. fetch-wintun.ps1
+# downloads https://www.wintun.net/builds/<file> and refuses it unless it
+# has this SHA-256. To move to a new release, replace the line below.
+07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51  wintun-0.14.1.zip

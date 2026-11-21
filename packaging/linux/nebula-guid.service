@@ -1,0 +1,35 @@
+# @authorship: AI-Assisted
+# @architect: AI (Claude Opus 5.5)
+#
+# The background service, installed by the .deb and .rpm. It runs as its
+# own user with only the capabilities Nebula and ping need; see "Installing
+# the service" in docs/m4-plan.md.
+
+[Unit]
+Description=nebula-gui background service
+Documentation=https://github.com/tucono/nebula-gui
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=nebula-guid
+Group=nebula-guid
+SupplementaryGroups=nebula-gui
+ExecStart=/usr/libexec/nebula-gui/nebula-guid --socket-group nebula-gui
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=yes
+RuntimeDirectory=nebula-gui
+RuntimeDirectoryMode=0755
+StateDirectory=nebula-gui
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+DeviceAllow=/dev/net/tun rw
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

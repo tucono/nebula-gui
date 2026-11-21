@@ -1,0 +1,298 @@
+// @authorship: AI-Assisted
+// @architect: AI (Claude Opus 5.5)
+
+// Package api defines the GUI ↔ service contract: request and response
+// types, error codes, and a typed client. Both binaries import it, so the
+// contract lives in one place. See docs/ipc-api.md.
+package api
+
+import (
+	"fmt"
+	"time"
+)
+
+// APIVersion is the version of the API this build speaks. Breaking changes
+// bump it together with the path prefix (/v1 → /v2).
+const APIVersion = 1
+
+// VersionResponse is returned by GET /v1/version.
+type VersionResponse struct {
+	ServiceVersion string `json:"service_version"`
+	NebulaVersion  string `json:"nebula_version"`
+	APIVersion     int    `json:"api_version"`
+	// InstanceID changes every time the service starts.
+	InstanceID string `json:"instance_id"`
+}
+
+// State is the Nebula manager's state.
+type State string
+
+// Nebula manager states.
+const (
+	StateStopped  State = "stopped"
+	StateStarting State = "starting"
+	StateRunning  State = "running"
+	StateStopping State = "stopping"
+	StateError    State = "error"
+)
+
+// CertInfo describes the host certificate of the active config.
+type CertInfo struct {
+	Name        string    `json:"name"`
+	Groups      []string  `json:"groups"`
+	NotAfter    time.Time `json:"not_after"`
+	Fingerprint string    `json:"fingerprint"`
+	// Expired is computed on every status call.
+	Expired bool `json:"expired"`
+	// CANotAfter is when the CA that signed the cert expires; nil if that
+	// CA isn't in pki.ca.
+	CANotAfter *time.Time `json:"ca_not_after,omitempty"`
+	// CAExpired is computed on every status call.
+	CAExpired bool `json:"ca_expired"`
+}
+
+// StatusResponse is returned by GET /v1/status.
+type StatusResponse struct {
+	State State  `json:"state"`
+	Error string `json:"error"`
+	// ErrorReason says why the state is error, when the service knows.
+	ErrorReason Reason     `json:"error_reason,omitempty"`
+	OverlayIPs  []string   `json:"overlay_ips"`
+	Cert        *CertInfo  `json:"cert"`
+	ListenPort  int        `json:"listen_port"`
+	StartedAt   *time.Time `json:"started_at"`
+	Configured  bool       `json:"configured"`
+	// InstanceID changes every time the service starts.
+	InstanceID string `json:"instance_id"`
+}
+
+// ErrorCode is a machine-readable error code.
+type ErrorCode string
+
+// Error codes. See docs/ipc-api.md.
+const (
+	CodeBadRequest     ErrorCode = "bad_request"
+	CodeInvalidConfig  ErrorCode = "invalid_config"
+	CodeNotConfigured  ErrorCode = "not_configured"
+	CodeAlreadyRunning ErrorCode = "already_running"
+	CodeNotRunning     ErrorCode = "not_running"
+	CodeNotFound       ErrorCode = "not_found"
+	CodeRateLimited    ErrorCode = "rate_limited"
+	CodePingFailed     ErrorCode = "ping_failed"
+	CodeInternal       ErrorCode = "internal"
+)
+
+// Reason refines an error code: it says why something failed, so clients
+// can show a specific message without parsing English. Clients must treat
+// an unknown or missing reason like no reason. See docs/ipc-api.md.
+type Reason string
+
+// Reasons for invalid_config.
+const (
+	ReasonYAMLSyntax   Reason = "yaml_syntax"
+	ReasonPKIMissing   Reason = "pki_missing"
+	ReasonSSHDEnabled  Reason = "sshd_enabled"
+	ReasonCertExpired  Reason = "cert_expired"
+	ReasonCAExpired    Reason = "ca_expired"
+	ReasonKeyMismatch  Reason = "key_mismatch"
+	ReasonWrongCA      Reason = "wrong_ca"
+	ReasonKeyEncrypted Reason = "key_encrypted"
+)
+
+// Reasons for internal errors from connect, and for state=error.
+const (
+	ReasonTunUnavailable Reason = "tun_unavailable"
+	ReasonPortInUse      Reason = "port_in_use"
+	ReasonNebulaStopped  Reason = "nebula_stopped"
+)
+
+// Reasons for bad_request from POST /v1/ping.
+const (
+	ReasonNotInOverlay Reason = "not_in_overlay"
+	ReasonOwnAddress   Reason = "own_address"
+)
+
+// ErrorBody is the JSON envelope for every error response.
+type ErrorBody struct {
+	Error *Error `json:"error"`
+}
+
+// Error is an error returned by the service.
+type Error struct {
+	Code ErrorCode `json:"code"`
+	// Reason is optional; see Reason.
+	Reason  Reason `json:"reason,omitempty"`
+	Message string `json:"message"`
+
+	// HTTPStatus is the response status code. It is set by the client and
+	// is not part of the JSON body.
+	HTTPStatus int `json:"-"`
+}
+
+func (e *Error) Error() string {
+	if e.Reason != "" {
+		return fmt.Sprintf("%s (%s): %s", e.Code, e.Reason, e.Message)
+	}
+	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+}
+
+// ConfigRequest is the body of PUT /v1/config.
+type ConfigRequest struct {
+	// YAML is a full Nebula config with pki.ca, pki.cert and pki.key
+	// inlined as PEM.
+	YAML string `json:"yaml"`
+}
+
+// ConfigPutResponse is returned by PUT /v1/config.
+type ConfigPutResponse struct {
+	// RestartRequired is set when Nebula is running with the previous
+	// config. The service does not restart on its own.
+	RestartRequired bool `json:"restart_required"`
+}
+
+// ConfigResponse is returned by GET /v1/config. pki.key is redacted.
+type ConfigResponse struct {
+	YAML string `json:"yaml"`
+}
+
+// Settings are the service's settings, returned by GET and PUT
+// /v1/settings. They apply to every user of the computer.
+type Settings struct {
+	// Autoconnect makes the service connect when it starts, if a config
+	// is stored. Off by default.
+	Autoconnect bool `json:"autoconnect"`
+}
+
+// SettingsRequest is the body of PUT /v1/settings. Every field is
+// required, and unknown fields are refused.
+type SettingsRequest struct {
+	Autoconnect *bool `json:"autoconnect"`
+}
+
+// PeerState says whether a peer's tunnel is up.
+type PeerState string
+
+// Peer states.
+const (
+	PeerEstablished PeerState = "established"
+	PeerPending     PeerState = "pending"
+)
+
+// Peer is a host this one has a tunnel, or a pending handshake, with.
+type Peer struct {
+	VpnIPs []string  `json:"vpn_ips"`
+	Name   string    `json:"name"`
+	Groups []string  `json:"groups"`
+	State  PeerState `json:"state"`
+	// CurrentRemote is the underlay address in use; empty when relayed or
+	// not known yet.
+	CurrentRemote string   `json:"current_remote"`
+	RemoteAddrs   []string `json:"remote_addrs"`
+	Relayed       bool     `json:"relayed"`
+	// CertNotAfter is nil when the peer's cert isn't known yet (pending).
+	CertNotAfter *time.Time `json:"cert_not_after"`
+	// LastPingRTTMs is the average RTT of the last ping to this peer that
+	// got a reply; nil if there was none since Nebula started.
+	LastPingRTTMs *float64 `json:"last_ping_rtt_ms"`
+}
+
+// PeersResponse is returned by GET /v1/peers.
+type PeersResponse struct {
+	Peers []Peer `json:"peers"`
+}
+
+// Ping limits and defaults. See docs/ipc-api.md.
+const (
+	PingDefaultCount     = 3
+	PingMaxCount         = 10
+	PingDefaultTimeoutMs = 5000
+	PingMinTimeoutMs     = 100
+	PingMaxTimeoutMs     = 15000
+)
+
+// PingRequest is the body of POST /v1/ping. Zero Count or TimeoutMs means
+// the default.
+type PingRequest struct {
+	VpnIP     string `json:"vpn_ip"`
+	Count     int    `json:"count,omitempty"`
+	TimeoutMs int    `json:"timeout_ms,omitempty"`
+}
+
+// PingResponse is returned by POST /v1/ping. No replies is a normal result;
+// the RTT fields are nil then.
+type PingResponse struct {
+	VpnIP    string   `json:"vpn_ip"`
+	Sent     int      `json:"sent"`
+	Received int      `json:"received"`
+	RTTMinMs *float64 `json:"rtt_min_ms,omitempty"`
+	RTTAvgMs *float64 `json:"rtt_avg_ms,omitempty"`
+	RTTMaxMs *float64 `json:"rtt_max_ms,omitempty"`
+}
+
+// LogsResponse is returned by GET /v1/logs.
+type LogsResponse struct {
+	// Next is the seq to pass as ?since= to get only newer lines.
+	Next  uint64    `json:"next"`
+	Lines []LogLine `json:"lines"`
+	// InstanceID changes every time the service starts. Seq numbers from a
+	// different instance mean nothing to this one.
+	InstanceID string `json:"instance_id"`
+}
+
+// LogLine is one entry from the service's log ring buffer.
+type LogLine struct {
+	Seq    uint64         `json:"seq"`
+	Time   time.Time      `json:"time"`
+	Level  string         `json:"level"`
+	Msg    string         `json:"msg"`
+	Fields map[string]any `json:"fields,omitempty"`
+}
+
+// Limits for GET /v1/diagnostics?lines=N.
+const (
+	DefaultDiagnosticsLines = 300
+	MaxDiagnosticsLines     = 2000
+)
+
+// DiagnosticsResponse is returned by GET /v1/diagnostics. Nothing in it is
+// masked: the GUI masks what it shows or shares.
+type DiagnosticsResponse struct {
+	ServiceVersion string `json:"service_version"`
+	NebulaVersion  string `json:"nebula_version"`
+	APIVersion     int    `json:"api_version"`
+	InstanceID     string `json:"instance_id"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	// OSVersion is empty if unknown.
+	OSVersion string         `json:"os_version"`
+	Status    StatusResponse `json:"status"`
+	// ConfigSummary is nil when no config is stored, or the stored config
+	// can't be parsed.
+	ConfigSummary *ConfigSummary `json:"config_summary"`
+	// Log holds the last lines of the service log file as raw JSON
+	// strings, oldest first.
+	Log []string `json:"log"`
+	// LogTruncated is set when older lines were left out.
+	LogTruncated bool `json:"log_truncated"`
+}
+
+// ConfigSummary describes the stored config with counts and flags only. It
+// never contains certificates or keys.
+type ConfigSummary struct {
+	// Lighthouses are the underlay addresses of lighthouse.hosts, looked
+	// up in static_host_map. They may be DNS names.
+	Lighthouses  []string `json:"lighthouses"`
+	AmLighthouse bool     `json:"am_lighthouse"`
+	// Relays is set when relay.relays lists any relays.
+	Relays     bool `json:"relays"`
+	Punchy     bool `json:"punchy"`
+	ListenPort int  `json:"listen_port"`
+	TunRoutes  int  `json:"tun_routes"`
+	// UnsafeRoutes counts tun.unsafe_routes.
+	UnsafeRoutes     int `json:"unsafe_routes"`
+	FirewallInbound  int `json:"firewall_inbound"`
+	FirewallOutbound int `json:"firewall_outbound"`
+	// StaticHostNames are the DNS names in static_host_map, without ports,
+	// so the GUI can mask them.
+	StaticHostNames []string `json:"static_host_names"`
+}

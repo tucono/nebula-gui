@@ -1,0 +1,219 @@
+<!-- @authorship: AI-Assisted -->
+<!-- @architect: AI (Claude Opus 5.5) -->
+
+# GUI ↔ Service API (v1)
+
+HTTP/1.1 with JSON bodies, over a local-only transport. No TCP listener, ever.
+
+| Platform | Transport | Default address |
+|---|---|---|
+| Linux | Unix socket | `/run/nebula-gui/nebula-guid.sock` (mode `0660`, group `nebula-gui`) |
+| macOS | Unix socket | `/var/run/nebula-guid.sock` (mode `0660`, group `nebula-gui`; see [platforms.md](platforms.md#macos)) |
+| Windows | Named pipe | `\\.\pipe\nebula-guid` (DACL: SYSTEM, Administrators, and the configured user group) |
+
+In development the address can be changed with `--listen` on the service and `NEBULA_GUI_SOCKET` on the GUI.
+
+All types live in `internal/api`. Errors use this shape:
+
+```json
+{ "error": { "code": "not_configured", "message": "no config has been imported" } }
+{ "error": { "code": "invalid_config", "reason": "cert_expired", "message": "nebula rejected the config: …" } }
+```
+
+`reason` is optional and refines the code (see [Error reasons](#error-reasons)). `message` is for logs and the details view, not for matching.
+
+| Code | HTTP status | Meaning |
+|---|---|---|
+| `bad_request` | 400 | Malformed request: bad JSON, a body over 1 MiB, a missing field, an unknown field in settings, a bad query parameter |
+| `invalid_config` | 422 | The config failed validation or Nebula's dry run |
+| `not_configured` | 409 | No config has been imported |
+| `already_running` | 409 | Connect while Nebula is running |
+| `not_running` | 409 | Disconnect, ping or close while Nebula is stopped |
+| `not_found` | 404 | Close a tunnel that doesn't exist |
+| `rate_limited` | 429 | Too many pings in flight or per minute |
+| `ping_failed` | 500 | The ping could not be sent |
+| `internal` | 500 | Anything else, including Nebula failing to start |
+
+### Error reasons
+
+The service sets `reason` when it knows why something failed, so the GUI can show a specific message without parsing English. Clients must treat an unknown or missing reason like no reason: new reasons can be added without changing `api_version`.
+
+| Reason | Code | Where | Meaning |
+|---|---|---|---|
+| `yaml_syntax` | `invalid_config` | `PUT /v1/config` | The config isn't valid YAML, or isn't a mapping |
+| `pki_missing` | `invalid_config` | `PUT /v1/config` | The `pki` section, or `pki.ca`, `pki.cert` or `pki.key`, is missing |
+| `sshd_enabled` | `invalid_config` | `PUT /v1/config` | `sshd.enabled` isn't `false` |
+| `cert_expired` | `invalid_config` | `PUT /v1/config`, connect | The host cert's `not_after` has passed |
+| `ca_expired` | `invalid_config` | `PUT /v1/config`, connect | Every CA in `pki.ca` has expired, or the CA that signed the host cert has (even if others in the bundle are valid) |
+| `key_mismatch` | `invalid_config` | `PUT /v1/config`, connect | `pki.key` isn't the key for `pki.cert` |
+| `wrong_ca` | `invalid_config` | `PUT /v1/config`, connect | `pki.cert` wasn't signed by any CA in `pki.ca` |
+| `key_encrypted` | `invalid_config` | `PUT /v1/config`, connect | `pki.key` is passphrase-protected |
+| `tun_unavailable` | `internal` | connect, `error_reason` | Nebula couldn't create the tun device |
+| `port_in_use` | `internal` | connect, `error_reason` | Nebula's UDP port is taken |
+| `nebula_stopped` | | `error_reason` | Nebula stopped on its own while running |
+| `not_in_overlay` | `bad_request` | `POST /v1/ping` | `vpn_ip` isn't inside this host's cert networks |
+| `own_address` | `bad_request` | `POST /v1/ping` | `vpn_ip` is this host's own overlay address |
+
+An `invalid_config` without a reason is any other dry-run failure, or a `pki.*` value that isn't inline PEM.
+
+The service finds reasons in this order: its own checks of the certs (expiry, signer, encrypted key), then Nebula's error values (`errors.Is`), and only then Nebula's messages. Tests against a real Nebula pin each reason, so an upgrade that changes a message fails a test.
+
+## Endpoints
+
+### `GET /v1/version`
+```json
+{ "service_version": "0.1.0", "nebula_version": "1.12.0", "api_version": 1, "instance_id": "5J6M6K2RBFGXWEHJPJLDOIQE6I" }
+```
+The GUI calls this first. If `api_version` doesn't match, it shows an "update required" message.
+
+`instance_id` is random and changes every time the service starts. The same value is in `/v1/status`, `/v1/logs` and `/v1/diagnostics`, and in the responses that return a status. When it changes, the service has restarted: the GUI checks `api_version` again and starts reading `/v1/logs` from `since=0`.
+
+### `GET /v1/status`
+```json
+{
+  "state": "running",             // stopped | starting | running | stopping | error
+  "error": "",                    // last error when state == "error"
+  "error_reason": "",             // optional; see Error reasons
+  "overlay_ips": ["192.168.100.3/24"],
+  "cert": {
+    "name": "laptop", "groups": ["users"], "not_after": "2027-01-01T00:00:00Z", "fingerprint": "…",
+    "expired": false,
+    "ca_not_after": "2030-01-01T00:00:00Z", // the CA that signed the cert; omitted if it isn't in pki.ca
+    "ca_expired": false
+  },
+  "listen_port": 4242,
+  "started_at": "2026-11-10T13:00:00Z",
+  "configured": true,
+  "instance_id": "5J6M6K2RBFGXWEHJPJLDOIQE6I"
+}
+```
+
+`expired` and `ca_expired` are computed on every call, so a cert that runs out after the import shows up before the user clicks Connect. The cert is described even when the stored config no longer passes the dry run, for example after a service restart with an expired cert.
+
+### `PUT /v1/config`
+Body: `{ "yaml": "<full nebula config with inline PEM>" }`
+
+Response: `{ "restart_required": false }`
+
+The service rejects the config with `invalid_config` if:
+- it doesn't parse;
+- `pki.ca`, `pki.cert` or `pki.key` is missing, or is a file path instead of inline PEM;
+- `sshd.enabled` is anything other than `false`;
+- the service's own cert checks fail (see [Error reasons](#error-reasons));
+- `nebula.Main` fails the dry run (`configTest=true`).
+
+A rejected config is not stored. If Nebula is running, `restart_required` is `true`: the new config is stored, but the service does **not** restart on its own. Until the next connect, `/v1/status` keeps describing the running config.
+
+### `GET /v1/config`
+Response: `{ "yaml": "…" }`, the stored YAML with `pki.key`, and any other value containing a private key, replaced by `<redacted>`. Returns `not_configured` if there is none.
+
+### `DELETE /v1/config`
+Stops Nebula if it is running, then deletes the stored config. Returns the new `status`.
+
+### `POST /v1/connect` / `POST /v1/disconnect`
+No body. Returns the new `status`.
+
+- Connect: `not_configured` without a config, `already_running` if running. The cert checks from `PUT /v1/config` run again first: if the cert or CA has expired since the import, the response is `invalid_config` with the reason, Nebula isn't started, and the state stays `stopped`. If Nebula fails to start (for example, no permission to create the tun device), the response is `internal` with Nebula's error and a reason if known, and the state becomes `error` with the same `error_reason`.
+- Disconnect: `not_running` if stopped. From `error`, disconnect clears the error and returns to `stopped`.
+- If Nebula stops on its own, the state becomes `error` with Nebula's error in `error` and `error_reason` `nebula_stopped`. Connect starts it again.
+- Requests that change state are serialized. A connect sent while another is starting waits for it, then returns `already_running`.
+
+### `GET /v1/peers`
+```json
+{
+  "peers": [
+    {
+      "vpn_ips": ["192.168.100.5"],
+      "name": "desktop",
+      "groups": ["users"],
+      "state": "established",       // established | pending
+      "current_remote": "203.0.113.7:4242",
+      "remote_addrs": ["203.0.113.7:4242", "10.0.0.5:4242"],
+      "relayed": false,
+      "cert_not_after": "2027-01-01T00:00:00Z",
+      "last_ping_rtt_ms": 23.4      // null if no ping to this peer got a reply
+    }
+  ]
+}
+```
+The data comes from `Control.ListHostmapHosts`: established tunnels first, then pending handshakes. A host in both is listed once, as established. Within each group, peers are ordered by overlay IP. When Nebula isn't running, `peers` is empty (not an error). `current_remote` is `""` when the peer is relayed or not reached yet, and `cert_not_after` is `null` while the peer's cert isn't known (pending handshakes).
+
+Nebula has no per-peer byte or latency counters, so `last_ping_rtt_ms` is the only latency figure: the average RTT of the last ping to that peer that got a reply. It's kept in memory and cleared on disconnect.
+
+Only peers with a tunnel are listed. The user's own names for peers ("saved peers") are kept by the GUI, not the service; see [m3-plan.md](m3-plan.md#saved-peers).
+
+### `POST /v1/peers/{vpn_ip}/close`
+Closes the tunnel to that peer and tells the peer (`Control.CloseTunnel`). Returns `204 No Content`.
+
+Errors: `bad_request` if `vpn_ip` isn't an IP, `not_running`, and `not_found` if there's no tunnel to it.
+
+### `POST /v1/ping`
+Request: `{ "vpn_ip": "192.168.100.5", "count": 3, "timeout_ms": 5000 }`
+
+- `count` is 1–10 (default 3) and `timeout_ms` 100–15000 (default 5000).
+- `vpn_ip` must be inside one of this host's cert networks and not this host's own address: otherwise `bad_request` with reason `not_in_overlay` or `own_address`.
+- Nebula must be running (`not_running`).
+- At most 4 pings run at once, at most one per peer, and at most 60 start per minute; beyond that, `rate_limited`.
+
+Response:
+```json
+{ "vpn_ip": "192.168.100.5", "sent": 3, "received": 3, "rtt_min_ms": 21.0, "rtt_avg_ms": 23.4, "rtt_max_ms": 27.9 }
+```
+`rtt_*_ms` are omitted when `received` is 0. No replies is a normal result, not an error: `ping_failed` means the echo requests couldn't be sent at all.
+
+The first ping often times out while the handshake runs. The GUI reads `GET /v1/peers` before and after a ping: when a ping without replies opened a tunnel, it shows "Connecting…" and pings once more. A tunnel still pending after a ping without replies counts as no answer, because Nebula keeps one for an address nobody has while it asks the lighthouse (see [m3-plan.md](m3-plan.md#changes-from-the-plan)).
+
+### `GET /v1/logs?since=<seq>`
+```json
+{ "next": 1042, "lines": [ { "seq": 1041, "time": "…", "level": "info", "msg": "Handshake message sent", "fields": { … } } ], "instance_id": "…" }
+```
+Ring buffer of the last 2000 entries at info level and above, from the service and from Nebula (Nebula's lines have `"component": "nebula"` in `fields`). Returns lines with `seq >= since`, oldest first. Pass `next` as `since` on the next call to get only new lines. If `since` is older than the buffer, the response starts at the oldest line kept. Sequence numbers start again at 0 when the service restarts, which `instance_id` shows.
+
+### `GET /v1/diagnostics?lines=N`
+Everything a troubleshooting report needs, in one call. `lines` is 1–2000 (default 300); larger values are capped at 2000.
+
+```json
+{
+  "service_version": "0.2.0", "nebula_version": "1.12.0", "api_version": 1,
+  "instance_id": "…",
+  "os": "linux", "arch": "amd64", "os_version": "Ubuntu 24.04.1 LTS",
+  "status": { …same as GET /v1/status… },
+  "config_summary": {
+    "lighthouses": ["203.0.113.7:4242"], "am_lighthouse": false,
+    "relays": false, "punchy": true, "listen_port": 4242,
+    "tun_routes": 0, "unsafe_routes": 0,
+    "firewall_inbound": 3, "firewall_outbound": 1,
+    "static_host_names": ["lighthouse.example.net"]
+  },
+  "log": [ "{\"time\":…,\"level\":\"INFO\",\"msg\":\"service started\",…}", … ],
+  "log_truncated": true
+}
+```
+
+- `os_version` is `PRETTY_NAME` from `/etc/os-release` on Linux, `sw_vers` on macOS, and the registry's `ProductName` and `DisplayVersion` on Windows. Empty if unknown.
+- `config_summary` is computed from the stored config, and is `null` when there is none. It holds counts, flags and addresses only, never certificates or keys:
+  - `lighthouses`: the underlay addresses of `lighthouse.hosts`, looked up in `static_host_map`. They may be DNS names.
+  - `relays`: `relay.relays` lists at least one relay. `punchy`: `punchy.punch`, or the old `punchy: true`.
+  - `static_host_names`: the DNS names in `static_host_map`, without ports, so the GUI can mask them.
+- `log` holds the last `N` lines of the [service log file](security.md#service-log-file) as raw JSON strings, oldest first, read across the rotated files. `log_truncated` is `true` when older lines were left out. A line cut short by a crash is returned as it is.
+- **Nothing is masked.** The GUI masks what it shows or shares, so the same data can produce both versions of a report. The endpoint is behind the same socket permissions as every other endpoint.
+
+### `GET /v1/settings` / `PUT /v1/settings`
+```json
+{ "autoconnect": false }
+```
+The service's settings. They apply to every user of the computer, and anyone who can use the socket can change them, the same people who can connect and disconnect.
+
+- `autoconnect`: when the service starts and a config is stored, it connects exactly as `POST /v1/connect` does and logs "connecting automatically". **Off by default.** Only a `PUT` turns it on: importing or deleting a config, installing and upgrading leave it alone. If Nebula fails to start (for example, the network isn't up yet at boot), the service tries again after 30 s, at most three times, and stops trying as soon as the user connects or disconnects, the setting is turned off, or the config is deleted. A rejected config (an expired cert, say) isn't retried. A failure leaves the same state and `error_reason` as a manual connect.
+
+`PUT` takes every field and returns the stored settings. A missing field, an unknown field or a value of the wrong type is `bad_request`.
+
+The service stores them in `settings.json` in its state directory (`0600`, next to the config). A missing file means the defaults; so does a damaged one, with a warning in the service log.
+
+## Updates
+
+There are no update endpoints. The service never downloads or installs updates; from v1.0 the GUI checks GitHub for a newer release itself ([updates.md](updates.md), ADR-009).
+
+## Versioning
+- Breaking changes increase the path prefix (`/v2`) and `api_version`.
+- New fields can be added at any time. Clients must ignore fields they don't recognize.

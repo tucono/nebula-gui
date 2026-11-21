@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- @authorship: Human-Primary -->
+<!-- @architect: Philip Thomas -->
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="95.25mm"
+   height="95.25mm"
+   viewBox="0 0 95.25 95.25"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="tray-on.svg"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#ffffff"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="1"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="mm"
+     inkscape:zoom="1.6602926"
+     inkscape:cx="100.58468"
+     inkscape:cy="187.31638"
+     inkscape:window-width="2560"
+     inkscape:window-height="1371"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g1" />
+  <defs
+     id="defs1">
+    <inkscape:path-effect
+       effect="bspline"
+       id="path-effect5"
+       is_visible="true"
+       lpeversion="1.3"
+       weight="33.333333"
+       steps="2"
+       helper_size="0"
+       apply_no_weight="true"
+       apply_with_weight="true"
+       only_selected="false"
+       uniform="false" />
+    <inkscape:path-effect
+       effect="bspline"
+       id="path-effect2"
+       is_visible="true"
+       lpeversion="1.3"
+       weight="33.333333"
+       steps="2"
+       helper_size="0"
+       apply_no_weight="true"
+       apply_with_weight="true"
+       only_selected="false"
+       uniform="false" />
+  </defs>
+  <g
+     inkscape:groupmode="layer"
+     id="layer3"
+     inkscape:label="Layer 3"
+     style="stroke:#005522">
+    <!-- The N is filled shapes, not a stroked line: macOS template icons
+         are recoloured by filling every path, which would close a line. -->
+    <path
+       style="fill:#217821;fill-opacity:1;stroke:none"
+       d="M 25.601709,21.873657 H 31.601709 V 73.593603 H 25.601709 Z"
+       id="path5-left"
+       transform="translate(-4.3114902,-0.10863113)" />
+    <path
+       style="fill:#217821;fill-opacity:1;stroke:none"
+       d="M 26.374433,23.883443 L 30.828985,19.863871 L 77.498547,71.583817 L 73.043995,75.603389 Z"
+       id="path5-diagonal"
+       transform="translate(-4.3114902,-0.10863113)" />
+    <path
+       style="fill:#217821;fill-opacity:1;stroke:none"
+       d="M 72.271271,21.873657 H 78.271271 V 73.593603 H 72.271271 Z"
+       id="path5-right"
+       transform="translate(-4.3114902,-0.10863113)" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="Layer 2"
+     style="fill:#808080">
+    <g
+       id="g1"
+       transform="translate(-4.3114901,-0.10863113)"
+       style="fill:#37c837;stroke:#217821;stroke-opacity:1">
+      <circle
+         style="fill:#37c837;fill-opacity:1;stroke:#217821;stroke-width:6;stroke-dasharray:none;stroke-opacity:1"
+         id="path1-3"
+         cx="28.601709"
+         cy="21.873657"
+         r="12" />
+      <circle
+         style="fill:#37c837;fill-opacity:1;stroke:#217821;stroke-width:6;stroke-dasharray:none;stroke-opacity:1"
+         id="path1-3-1"
+         cx="75.271271"
+         cy="21.873657"
+         r="12" />
+      <circle
+         style="fill:#37c837;fill-opacity:1;stroke:#217821;stroke-width:6;stroke-dasharray:none;stroke-opacity:1"
+         id="path1-3-1-3"
+         cx="75.271271"
+         cy="73.593605"
+         r="12" />
+      <circle
+         style="fill:#37c837;fill-opacity:1;stroke:#217821;stroke-width:6;stroke-dasharray:none;stroke-opacity:1"
+         id="path1"
+         cx="28.601709"
+         cy="73.593605"
+         r="12" />
+    </g>
+  </g>
+</svg>

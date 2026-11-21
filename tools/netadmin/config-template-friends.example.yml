@@ -1,0 +1,67 @@
+# @authorship: AI-Assisted
+# @architect: AI (Gemini 4 Hydrogen)
+#
+# Template for friends' devices (gaming and filesharing).
+# Sign certificates with: nebula-cert sign -name ... -groups friends
+#
+# Copy to ~/nebula-ca/config-template-friends.yml, replace the example
+# lighthouse values, and build configs with:
+#   make-config.sh -t config-template-friends.yml ca.crt friend.crt friend.key
+#
+# Don't add a pki section here, and keep sshd off: nebula-gui refuses
+# configs that turn the SSH console on.
+
+static_host_map:
+  "192.168.100.1": ["lighthouse.example.net:4242"]
+
+lighthouse:
+  am_lighthouse: false
+  interval: 60
+  hosts:
+    - "192.168.100.1"
+
+listen:
+  host: "[::]"
+  port: 0
+
+punchy:
+  punch: true
+
+relay:
+  relays:
+    - "192.168.100.1"
+  use_relays: true
+
+tun:
+  mtu: 1300
+
+logging:
+  level: info
+
+firewall:
+  outbound:
+    # isolate friends from initiating connections to family devices
+    - port: any
+      proto: any
+      group: admin
+    - port: any
+      proto: any
+      group: server
+    - port: any
+      proto: any
+      group: friends
+  inbound:
+    # allow ping from you and friends so nebula-gui can open tunnels
+    - port: any
+      proto: icmp
+      group: admin
+    - port: any
+      proto: icmp
+      group: friends
+    # gaming and filesharing on unprivileged ports (keeps SSH/SMB/RDP closed)
+    - port: 1024-65535
+      proto: any
+      group: friends
+    - port: 1024-65535
+      proto: any
+      group: admin

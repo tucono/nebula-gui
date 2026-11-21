@@ -1,0 +1,74 @@
+# @authorship: AI-Assisted
+# @architect: AI (Gemini 4 Hydrogen)
+#
+# Template for your own servers (NAS, homelab, game hosts).
+# Sign certificates with: nebula-cert sign -name ... -groups admin,server
+#
+# Copy to ~/nebula-ca/config-template-server.yml, replace the example
+# lighthouse values, adjust the service ports to match what you host, and
+# build configs with:
+#   make-config.sh -t config-template-server.yml ca.crt server.crt server.key
+#
+# Don't add a pki section here, and keep sshd off if using nebula-gui.
+
+static_host_map:
+  "192.168.100.1": ["lighthouse.example.net:4242"]
+
+lighthouse:
+  am_lighthouse: false
+  interval: 60
+  hosts:
+    - "192.168.100.1"
+
+listen:
+  host: "[::]"
+  port: 0
+
+punchy:
+  punch: true
+
+relay:
+  relays:
+    - "192.168.100.1"
+  use_relays: true
+
+tun:
+  mtu: 1300
+
+logging:
+  level: info
+
+firewall:
+  outbound:
+    - port: any
+      proto: any
+      host: any
+  inbound:
+    # ping from anyone on the network
+    - port: any
+      proto: icmp
+      host: any
+    # full access for your own devices (SSH, management UIs, all services)
+    - port: any
+      proto: any
+      group: admin
+    # friends: game servers and filesharing (adjust ports to your hosted apps)
+    - port: 25565          # e.g. Minecraft
+      proto: tcp
+      group: friends
+    - port: 2456-2458      # e.g. Valheim
+      proto: udp
+      group: friends
+    - port: 22000          # e.g. Syncthing
+      proto: any
+      group: friends
+    # family: filesharing and limited services
+    - port: 443            # HTTPS reverse proxy for family web services
+      proto: tcp
+      group: family
+    - port: 8096           # e.g. Jellyfin
+      proto: tcp
+      group: family
+    - port: 445            # e.g. SMB fileshare
+      proto: tcp
+      group: family

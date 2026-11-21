@@ -1,0 +1,64 @@
+# @authorship: AI-Assisted
+# @architect: AI (Claude Opus 5.5)
+#
+# Template for the configs handed out to nebula-gui users. make-config.sh
+# adds the pki section (CA, certificate and key) in front of it.
+#
+# Copy this file to config-template.yml in your CA folder (outside the repo)
+# and replace the example values with your network's. Don't add a pki
+# section here, and keep the SSH console (sshd) off: nebula-gui refuses
+# configs that turn it on.
+
+# The lighthouse: its overlay IP mapped to its public address. A DNS name
+# keeps working when the server's IP changes.
+static_host_map:
+  "192.168.100.1": ["lighthouse.example.net:4242"]
+
+lighthouse:
+  am_lighthouse: false
+  interval: 60
+  hosts:
+    - "192.168.100.1"
+
+# Port 0 picks a random free port, so two installs never clash and nothing
+# needs opening on home routers.
+listen:
+  host: "[::]"
+  port: 0
+
+punchy:
+  punch: true
+
+# Lets peers that can't reach each other directly (strict NAT) go through
+# the lighthouse. Needs relay.am_relay: true in the lighthouse's own config.
+# Delete this section if the lighthouse isn't a relay.
+relay:
+  relays:
+    - "192.168.100.1"
+  use_relays: true
+
+# Leave tun.dev unset: Linux and macOS pick a name, and nebula-gui uses
+# nebula1 on Windows. Avoid unsafe_routes unless you mean to route traffic
+# through another member's network.
+tun:
+  mtu: 1300
+
+logging:
+  level: info
+
+# Who may reach this device. Groups come from the certificates
+# (nebula-cert sign -groups).
+firewall:
+  outbound:
+    - port: any
+      proto: any
+      host: any
+  inbound:
+    # ping from anyone on the network
+    - port: any
+      proto: icmp
+      host: any
+    # everything from devices in the family group
+    - port: any
+      proto: any
+      group: family

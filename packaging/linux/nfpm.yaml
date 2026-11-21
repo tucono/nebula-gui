@@ -1,0 +1,102 @@
+# @authorship: AI-Assisted
+# @architect: AI (Claude Opus 5.5)
+#
+# The .deb and .rpm, built by make package-linux from the repository root.
+# PKG_VERSION comes from packaging/version.sh; the binaries and icons are
+# built into dist/ first.
+
+name: nebula-gui
+arch: amd64
+platform: linux
+version: ${PKG_VERSION}
+version_schema: none
+release: 1
+section: net
+priority: optional
+maintainer: Philip Thomas <6501696+tucono@users.noreply.github.com>
+homepage: https://github.com/tucono/nebula-gui
+description: |-
+  Desktop app for joining a Nebula overlay network.
+  A background service runs Nebula; the app imports the config you were
+  given, connects and disconnects, and shows the network's state.
+  An independent project, not affiliated with or endorsed by Slack or
+  Defined Networking.
+
+overrides:
+  deb:
+    depends:
+      - libgl1
+      - libwayland-client0
+      - libwayland-cursor0
+      - libwayland-egl1
+      - libxkbcommon0
+      - libx11-6
+      - libxcursor1
+      - libxi6
+      - libxinerama1
+      - libxrandr2
+  rpm:
+    depends:
+      - shadow-utils
+      - mesa-libGL
+      - libwayland-client
+      - libwayland-cursor
+      - libwayland-egl
+      - libxkbcommon
+      - libX11
+      - libXcursor
+      - libXi
+      - libXinerama
+      - libXrandr
+
+contents:
+  - src: dist/linux/nebula-gui
+    dst: /usr/bin/nebula-gui
+    file_info: { mode: 0755 }
+  - src: dist/linux/nebula-guid
+    dst: /usr/libexec/nebula-gui/nebula-guid
+    file_info: { mode: 0755 }
+  - src: packaging/linux/nebula-guid.service
+    dst: /usr/lib/systemd/system/nebula-guid.service
+    file_info: { mode: 0644 }
+  - src: dist/THIRD_PARTY_NOTICES.txt
+    dst: /usr/share/doc/nebula-gui/THIRD_PARTY_NOTICES.txt
+    file_info: { mode: 0644 }
+  - src: packaging/linux/sysusers.conf
+    dst: /usr/lib/sysusers.d/nebula-gui.conf
+    file_info: { mode: 0644 }
+  - src: packaging/linux/io.github.tucono.nebulagui.desktop
+    dst: /usr/share/applications/io.github.tucono.nebulagui.desktop
+    file_info: { mode: 0644 }
+  - src: internal/gui/assets/app.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/io.github.tucono.nebulagui.svg
+    file_info: { mode: 0644 }
+  - src: dist/icons/nebula-gui-16.png
+    dst: /usr/share/icons/hicolor/16x16/apps/io.github.tucono.nebulagui.png
+    file_info: { mode: 0644 }
+  - src: dist/icons/nebula-gui-24.png
+    dst: /usr/share/icons/hicolor/24x24/apps/io.github.tucono.nebulagui.png
+    file_info: { mode: 0644 }
+  - src: dist/icons/nebula-gui-32.png
+    dst: /usr/share/icons/hicolor/32x32/apps/io.github.tucono.nebulagui.png
+    file_info: { mode: 0644 }
+  - src: dist/icons/nebula-gui-48.png
+    dst: /usr/share/icons/hicolor/48x48/apps/io.github.tucono.nebulagui.png
+    file_info: { mode: 0644 }
+  - src: dist/icons/nebula-gui-64.png
+    dst: /usr/share/icons/hicolor/64x64/apps/io.github.tucono.nebulagui.png
+    file_info: { mode: 0644 }
+  - src: dist/icons/nebula-gui-128.png
+    dst: /usr/share/icons/hicolor/128x128/apps/io.github.tucono.nebulagui.png
+    file_info: { mode: 0644 }
+  - src: dist/icons/nebula-gui-256.png
+    dst: /usr/share/icons/hicolor/256x256/apps/io.github.tucono.nebulagui.png
+    file_info: { mode: 0644 }
+  - src: dist/icons/nebula-gui-512.png
+    dst: /usr/share/icons/hicolor/512x512/apps/io.github.tucono.nebulagui.png
+    file_info: { mode: 0644 }
+
+scripts:
+  postinstall: packaging/linux/postinstall.sh
+  preremove: packaging/linux/preremove.sh
+  postremove: packaging/linux/postremove.sh
