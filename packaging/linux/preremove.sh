@@ -7,8 +7,9 @@
 # entry, which would point at the removed app, and stops and disables the
 # service, which stops Nebula and removes its network interface. Each
 # user's own files are kept, unless a purge removes them (postremove.sh).
-# It leaves a mark in the state directory, which a removal keeps, so that
-# installing again counts as a fresh install (postinstall.sh).
+# On a .deb, it leaves a mark in the state directory, which a removal
+# keeps, so that installing again counts as a fresh install
+# (postinstall.sh); a purge removes the mark. rpm needs none.
 #
 # Arguments: dpkg passes "remove" on removal; rpm passes 0 on removal and 1
 # on upgrade.
@@ -25,7 +26,7 @@ pkill -x nebula-gui 2>/dev/null || true
 if [ -d /run/systemd/system ]; then
 	systemctl disable --now nebula-guid.service || true
 fi
-if mkdir -p /var/lib/nebula-gui; then
+if [ "$1" = remove ] && mkdir -p /var/lib/nebula-gui; then
 	touch /var/lib/nebula-gui/.removed || true
 fi
 exit 0

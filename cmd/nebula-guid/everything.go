@@ -89,6 +89,6 @@ func (e everything) run(yes bool) error {
 		return errSomeNotRemoved
 	}
 	_, _ = fmt.Fprintln(e.out, "Everything is removed. Now remove the package: sudo dnf remove nebula-gui\n"+
-		"(or sudo apt remove nebula-gui).")
+		"(or sudo apt purge nebula-gui).")
 	return nil
 }
